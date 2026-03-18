@@ -1,0 +1,301 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+header {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+header h1 {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.action-bar {
+  flex-shrink: 0;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color 0.2s;
+}
+
+.btn-refresh {
+  background-color: #4a90d9;
+  color: white;
+}
+
+.btn-refresh:hover {
+  background-color: #3a7bc8;
+}
+
+.btn-select {
+  background-color: #6c757d;
+  color: white;
+}
+
+.btn-select:hover:not(:disabled) {
+  background-color: #5a6268;
+}
+
+.btn-select:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.btn-auto {
+  background-color: #17a2b8;
+  color: white;
+}
+
+.btn-auto:hover {
+  background-color: #138496;
+}
+
+.btn-auto-active {
+  background-color: #28a745;
+  color: white;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+.btn-kill {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.btn-kill:hover:not(:disabled) {
+  background-color: #c0392b;
+}
+
+.btn-kill:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+.search-bar {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+.search-bar input {
+  width: 100%;
+  max-width: 300px;
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+.search-bar input:focus {
+  outline: none;
+  border-color: #4a90d9;
+}
+
+.port-list {
+  flex: 1;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: auto;
+  min-height: 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid #eee;
+}
+
+th {
+  background-color: #fafafa;
+  font-weight: 600;
+  font-size: 13px;
+  color: #666;
+  text-transform: uppercase;
+}
+
+th.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.2s;
+}
+
+th.sortable:hover {
+  background-color: #f0f0f0;
+}
+
+th.sortable.active {
+  color: #4a90d9;
+}
+
+tr:hover {
+  background-color: #f9f9f9;
+}
+
+.empty-state {
+  padding: 40px;
+  text-align: center;
+  color: #999;
+}
+
+.loading {
+  flex-shrink: 0;
+  padding: 12px;
+  text-align: center;
+  color: #666;
+  background: #f9f9f9;
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+
+.error {
+  flex-shrink: 0;
+  padding: 12px;
+  background-color: #fee;
+  border: 1px solid #fcc;
+  border-radius: 6px;
+  color: #c00;
+  margin-bottom: 12px;
+}
+
+.kill-results {
+  flex-shrink: 0;
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.kill-results h3 {
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.kill-results ul {
+  list-style: none;
+}
+
+.kill-results li {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.kill-results li.success {
+  color: #27ae60;
+}
+
+.kill-results li.failed {
+  color: #e74c3c;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  max-width: 400px;
+  width: 90%;
+}
+
+.modal h3 {
+  margin-bottom: 12px;
+  font-size: 18px;
+  color: #1a1a1a;
+}
+
+.modal p {
+  margin-bottom: 8px;
+  color: #666;
+}
+
+.modal .warning {
+  color: #e74c3c;
+  font-size: 13px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+.btn-cancel {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.btn-cancel:hover {
+  background-color: #e0e0e0;
+}
+
+.btn-confirm {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.btn-confirm:hover {
+  background-color: #c0392b;
+}

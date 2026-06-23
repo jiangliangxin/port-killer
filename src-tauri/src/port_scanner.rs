@@ -539,8 +539,8 @@ pub fn scan_ports() -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     ports.extend(get_tcp6_ports(&process_map)?);
     ports.extend(get_udp6_ports(&process_map)?);
 
-    // 按端口号排序
-    ports.sort_by(|a, b| a.port.cmp(&b.port));
+    // 按端口号排序，保持前端初始展示稳定。
+    ports.sort_by_key(|port| port.port);
 
     Ok(ports)
 }

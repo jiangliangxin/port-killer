@@ -19,7 +19,7 @@ pnpm release          # 生成点击即用的便携版 exe
 
 构建产物：
 - 可执行文件：`src-tauri/target/release/kill-port.exe`
-- 便携版发布文件：`release/端口占用管理工具.exe`
+- 便携版发布文件：`release/port-killer.exe`
 
 当前发布目标是点击即用的单文件 exe，不生成安装包。
 

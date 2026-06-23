@@ -3,12 +3,9 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $sourceExe = Join-Path $repoRoot "src-tauri\target\release\kill-port.exe"
 $releaseDir = Join-Path $repoRoot "release"
-
-# Keep this script ASCII-only so Windows PowerShell 5 can parse it without a UTF-8 BOM.
-$portableBaseName = -join ([char[]](0x7AEF, 0x53E3, 0x5360, 0x7528, 0x7BA1, 0x7406, 0x5DE5, 0x5177))
-$portableExeName = "$portableBaseName.exe"
+$portableExeName = "port-killer.exe"
 $targetExe = Join-Path $releaseDir $portableExeName
-$hashFile = Join-Path $releaseDir "$portableBaseName.sha256.txt"
+$hashFile = Join-Path $releaseDir "port-killer.sha256.txt"
 
 function Get-Sha256Hash {
     param([string]$Path)
@@ -36,8 +33,9 @@ if (-not (Test-Path -LiteralPath $sourceExe)) {
     throw "Release exe not found. Run pnpm tauri build first."
 }
 
-# The release directory contains only the portable file users should double-click.
+# The release directory contains only the latest portable files.
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+Get-ChildItem -LiteralPath $releaseDir -File | Remove-Item -Force
 Copy-Item -LiteralPath $sourceExe -Destination $targetExe -Force
 
 $hash = Get-Sha256Hash -Path $targetExe

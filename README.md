@@ -16,14 +16,14 @@ Windows 端口占用管理工具，扫描端口占用，一键终止进程。仅
 
 ## 使用
 
-从 [Releases](https://github.com/jiangxin/kill-port/releases) 下载 `端口占用管理工具.exe` 后双击运行，或自行构建：
+从 [Releases](https://github.com/jiangliangxin/port-killer/releases) 下载 `port-killer.exe` 后双击运行，或自行构建：
 
 ```bash
 pnpm install
 pnpm release
 ```
 
-便携版产物为 `release/端口占用管理工具.exe`，可直接双击运行；同时会生成 `release/端口占用管理工具.sha256.txt` 便于校验。  
+便携版产物为 `release/port-killer.exe`，可直接双击运行；同时会生成 `release/port-killer.sha256.txt` 便于校验。  
 如果构建时报“拒绝访问”，先关闭正在运行的 exe 再重新构建。
 
 ## 注意

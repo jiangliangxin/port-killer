@@ -42,8 +42,8 @@ jobs:
       - name: Verify release files
         shell: pwsh
         run: |
-          $exe = "release/端口占用管理工具.exe"
-          $hash = "release/端口占用管理工具.sha256.txt"
+          $exe = "release/port-killer.exe"
+          $hash = "release/port-killer.sha256.txt"
           if (-not (Test-Path -LiteralPath $exe)) { throw "Missing $exe" }
           if (-not (Test-Path -LiteralPath $hash)) { throw "Missing $hash" }
 
@@ -57,5 +57,5 @@ jobs:
           gh release create $tag `
             --title $tag `
             --notes "Portable Windows release." `
-            "release/端口占用管理工具.exe" `
-            "release/端口占用管理工具.sha256.txt"
+            "release/port-killer.exe" `
+            "release/port-killer.sha256.txt"

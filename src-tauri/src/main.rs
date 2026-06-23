@@ -1,8 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod app_status;
 mod port_scanner;
 mod process_killer;
 
+use app_status::AppStatus;
 use port_scanner::PortInfo;
 use process_killer::{KillResult, KillTarget};
 
@@ -21,6 +23,11 @@ fn kill_processes(targets: Vec<KillTarget>, force: bool) -> Result<Vec<KillResul
     ))
 }
 
+#[tauri::command]
+fn get_app_status() -> AppStatus {
+    app_status::current_status()
+}
+
 fn main() {
     tauri::Builder::default()
         .setup(|app| {
@@ -33,7 +40,11 @@ fn main() {
             let _ = app;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![scan_ports, kill_processes])
+        .invoke_handler(tauri::generate_handler![
+            scan_ports,
+            kill_processes,
+            get_app_status
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

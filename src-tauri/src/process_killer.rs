@@ -1,6 +1,7 @@
 use crate::port_scanner::PortInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::io::ErrorKind;
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
@@ -37,6 +38,23 @@ fn output_message(output: Output) -> String {
     }
 
     "taskkill 返回失败".to_string()
+}
+
+fn is_permission_denied_message(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("access is denied")
+        || lower.contains("permission")
+        || message.contains("拒绝访问")
+        || message.contains("权限")
+}
+
+fn permission_denied_result(pid: u32) -> KillResult {
+    KillResult {
+        pid,
+        success: false,
+        status: "permissionDenied".to_string(),
+        message: "权限不足，无法关闭该进程；请以管理员身份重新运行后再试".to_string(),
+    }
 }
 
 fn target_still_matches(target: &KillTarget, port: &PortInfo) -> bool {
@@ -94,12 +112,16 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
     {
         Ok(c) => c,
         Err(e) => {
+            if e.kind() == ErrorKind::PermissionDenied {
+                return permission_denied_result(pid);
+            }
+
             return KillResult {
                 pid,
                 success: false,
                 status: "failed".to_string(),
                 message: format!("启动 taskkill 失败: {}", e),
-            }
+            };
         }
     };
 
@@ -120,6 +142,10 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
                         .ok()
                         .map(output_message)
                         .unwrap_or_else(|| "未知错误".to_string());
+                    if is_permission_denied_message(&message) {
+                        return permission_denied_result(pid);
+                    }
+
                     return KillResult {
                         pid,
                         success: false,

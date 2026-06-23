@@ -4,7 +4,7 @@ import { usePorts } from "./hooks/usePorts";
 import { SearchBar } from "./components/SearchBar";
 import { PortList } from "./components/PortList";
 import { ActionBar } from "./components/ActionBar";
-import { KillResult, KillTarget, SortConfig, SortField } from "./types/port";
+import { AppStatus, KillResult, KillTarget, SortConfig, SortField } from "./types/port";
 
 const DEFAULT_SORT: SortConfig = { field: "port", order: "asc" };
 
@@ -17,6 +17,15 @@ function App() {
   const [sortConfig, setSortConfig] = useState<SortConfig>(DEFAULT_SORT);
   const [showConfirm, setShowConfirm] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [appStatus, setAppStatus] = useState<AppStatus | null>(null);
+
+  useEffect(() => {
+    invoke<AppStatus>("get_app_status")
+      .then(setAppStatus)
+      .catch((e) => {
+        console.error("Failed to get app status:", e);
+      });
+  }, []);
 
   // 自动刷新端口列表，适合排查 dev server 反复占用端口的场景。
   useEffect(() => {
@@ -206,6 +215,16 @@ function App() {
     <div className="app">
       <header>
         <h1>端口占用管理工具</h1>
+        {appStatus && (
+          <div className={`permission-banner ${appStatus.elevated ? "elevated" : "limited"}`}>
+            <span>{appStatus.elevated ? "管理员模式" : "普通模式"}</span>
+            <p>
+              {appStatus.elevated
+                ? "可以关闭当前用户和高权限进程。"
+                : "可以扫描端口；关闭高权限进程时可能需要以管理员身份重新运行。"}
+            </p>
+          </div>
+        )}
       </header>
 
       <main>
@@ -243,7 +262,13 @@ function App() {
             {killResults.map((result, index) => (
               <li
                 key={`${result.pid}-${result.status}-${index}`}
-                className={result.success ? "success" : "failed"}
+                className={
+                  result.success
+                    ? "success"
+                    : result.status === "permissionDenied"
+                      ? "warning"
+                      : "failed"
+                }
               >
                 PID {result.pid}: {result.message}
               </li>

@@ -31,6 +31,43 @@ header h1 {
   color: #1a1a1a;
 }
 
+.permission-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.permission-banner span {
+  flex-shrink: 0;
+  font-weight: 700;
+}
+
+.permission-banner p {
+  color: #46515c;
+}
+
+.permission-banner.elevated {
+  border: 1px solid #b9dfc4;
+  background: #eef8f1;
+}
+
+.permission-banner.elevated span {
+  color: #1f7a3a;
+}
+
+.permission-banner.limited {
+  border: 1px solid #f0d69a;
+  background: #fff8e8;
+}
+
+.permission-banner.limited span {
+  color: #9a6a00;
+}
+
 main {
   flex: 1;
   display: flex;
@@ -317,6 +354,10 @@ tr.selected-row:hover {
 
 .kill-results li.failed {
   color: #e74c3c;
+}
+
+.kill-results li.warning {
+  color: #9a6a00;
 }
 
 .modal-overlay {

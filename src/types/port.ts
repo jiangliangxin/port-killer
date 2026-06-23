@@ -22,8 +22,12 @@ export interface KillTarget {
 export interface KillResult {
   pid: number;
   success: boolean;
-  status: "released" | "notReleased" | "skipped" | "failed" | "closed";
+  status: "released" | "notReleased" | "skipped" | "failed" | "closed" | "permissionDenied";
   message: string;
+}
+
+export interface AppStatus {
+  elevated: boolean;
 }
 
 export type SortField =

@@ -3,8 +3,7 @@ use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use windows::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER;
 use windows::Win32::NetworkManagement::IpHelper::{
-    GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCPROW_OWNER_PID,
-    MIB_TCPTABLE_OWNER_PID, MIB_UDPROW_OWNER_PID, MIB_UDPTABLE_OWNER_PID,
+    GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCPTABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID,
     TCP_TABLE_CLASS, UDP_TABLE_CLASS,
 };
 use windows::Win32::System::Diagnostics::ToolHelp::{
@@ -14,8 +13,8 @@ use windows::Win32::System::Diagnostics::ToolHelp::{
 // AF_INET = 2, AF_INET6 = 23
 const AF_INET: u32 = 2;
 const AF_INET6: u32 = 23;
-// TCP_TABLE_OWNER_PID_ALL = 5
-const TCP_TABLE_OWNER_PID_ALL: i32 = 5;
+// TCP_TABLE_OWNER_PID_LISTENER = 3，只展示真正监听中的服务端口。
+const TCP_TABLE_OWNER_PID_LISTENER: i32 = 3;
 // UDP_TABLE_OWNER_PID = 1
 const UDP_TABLE_OWNER_PID: i32 = 1;
 
@@ -139,20 +138,20 @@ fn get_tcp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
             &mut size,
             false,
             AF_INET,
-            TCP_TABLE_CLASS(TCP_TABLE_OWNER_PID_ALL),
+            TCP_TABLE_CLASS(TCP_TABLE_OWNER_PID_LISTENER),
             0,
         );
 
         let mut buffer: Vec<u8> = vec![0; size as usize];
-        let table_ptr = buffer.as_mut_ptr() as *mut MIB_TCPTABLE_OWNER_PID;
 
         loop {
+            let table_ptr = buffer.as_mut_ptr() as *mut MIB_TCPTABLE_OWNER_PID;
             let ret = GetExtendedTcpTable(
                 Some(table_ptr as *mut _),
                 &mut size,
                 false,
                 AF_INET,
-                TCP_TABLE_CLASS(TCP_TABLE_OWNER_PID_ALL),
+                TCP_TABLE_CLASS(TCP_TABLE_OWNER_PID_LISTENER),
                 0,
             );
 
@@ -166,10 +165,11 @@ fn get_tcp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
             }
         }
 
+        let table_ptr = buffer.as_ptr() as *const MIB_TCPTABLE_OWNER_PID;
         let table = &*table_ptr;
         let row_count = table.dwNumEntries;
 
-        let rows = table.table.as_ptr() as *const MIB_TCPROW_OWNER_PID;
+        let rows = table.table.as_ptr();
         for i in 0..row_count {
             let row = &*rows.add(i as usize);
             let port = u16::from_be(row.dwLocalPort as u16);
@@ -207,9 +207,9 @@ fn get_udp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
         );
 
         let mut buffer: Vec<u8> = vec![0; size as usize];
-        let table_ptr = buffer.as_mut_ptr() as *mut MIB_UDPTABLE_OWNER_PID;
 
         loop {
+            let table_ptr = buffer.as_mut_ptr() as *mut MIB_UDPTABLE_OWNER_PID;
             let ret = GetExtendedUdpTable(
                 Some(table_ptr as *mut _),
                 &mut size,
@@ -229,10 +229,11 @@ fn get_udp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
             }
         }
 
+        let table_ptr = buffer.as_ptr() as *const MIB_UDPTABLE_OWNER_PID;
         let table = &*table_ptr;
         let row_count = table.dwNumEntries;
 
-        let rows = table.table.as_ptr() as *const MIB_UDPROW_OWNER_PID;
+        let rows = table.table.as_ptr();
         for i in 0..row_count {
             let row = &*rows.add(i as usize);
             let port = u16::from_be(row.dwLocalPort as u16);
@@ -244,7 +245,7 @@ fn get_udp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
                 protocol: "UDP".to_string(),
                 pid,
                 process_name: process_map.get(&pid).cloned().unwrap_or_else(|| "Unknown".to_string()),
-                state: "LISTEN".to_string(),
+                state: "BOUND".to_string(),
                 local_address: format!("{}:{}", ip, port),
             });
         }
@@ -263,20 +264,20 @@ fn get_tcp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, B
             &mut size,
             false,
             AF_INET6,
-            TCP_TABLE_CLASS(TCP_TABLE_OWNER_PID_ALL),
+            TCP_TABLE_CLASS(TCP_TABLE_OWNER_PID_LISTENER),
             0,
         );
 
         let mut buffer: Vec<u8> = vec![0; size as usize];
-        let table_ptr = buffer.as_mut_ptr() as *mut MIB_TCP6TABLE_OWNER_PID;
 
         loop {
+            let table_ptr = buffer.as_mut_ptr() as *mut MIB_TCP6TABLE_OWNER_PID;
             let ret = GetExtendedTcpTable(
                 Some(table_ptr as *mut _),
                 &mut size,
                 false,
                 AF_INET6,
-                TCP_TABLE_CLASS(TCP_TABLE_OWNER_PID_ALL),
+                TCP_TABLE_CLASS(TCP_TABLE_OWNER_PID_LISTENER),
                 0,
             );
 
@@ -290,10 +291,11 @@ fn get_tcp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, B
             }
         }
 
+        let table_ptr = buffer.as_ptr() as *const MIB_TCP6TABLE_OWNER_PID;
         let table = &*table_ptr;
         let row_count = table.dwNumEntries;
 
-        let rows = table.table.as_ptr() as *const MIB_TCP6ROW_OWNER_PID;
+        let rows = table.table.as_ptr();
         for i in 0..row_count {
             let row = &*rows.add(i as usize);
             let port = u16::from_be(row.dwLocalPort as u16);
@@ -330,9 +332,9 @@ fn get_udp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, B
         );
 
         let mut buffer: Vec<u8> = vec![0; size as usize];
-        let table_ptr = buffer.as_mut_ptr() as *mut MIB_UDP6TABLE_OWNER_PID;
 
         loop {
+            let table_ptr = buffer.as_mut_ptr() as *mut MIB_UDP6TABLE_OWNER_PID;
             let ret = GetExtendedUdpTable(
                 Some(table_ptr as *mut _),
                 &mut size,
@@ -352,10 +354,11 @@ fn get_udp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, B
             }
         }
 
+        let table_ptr = buffer.as_ptr() as *const MIB_UDP6TABLE_OWNER_PID;
         let table = &*table_ptr;
         let row_count = table.dwNumEntries;
 
-        let rows = table.table.as_ptr() as *const MIB_UDP6ROW_OWNER_PID;
+        let rows = table.table.as_ptr();
         for i in 0..row_count {
             let row = &*rows.add(i as usize);
             let port = u16::from_be(row.dwLocalPort as u16);
@@ -367,7 +370,7 @@ fn get_udp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, B
                 protocol: "UDP6".to_string(),
                 pid,
                 process_name: process_map.get(&pid).cloned().unwrap_or_else(|| "Unknown".to_string()),
-                state: "LISTEN".to_string(),
+                state: "BOUND".to_string(),
                 local_address: format!("[{}]:{}", ip, port),
             });
         }

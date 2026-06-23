@@ -11,16 +11,16 @@ Windows 端口占用管理工具，扫描端口占用，一键终止进程。
 - 勾选进程并批量终止（`taskkill /F`）
 - 自动刷新
 
-## 安装
+## 使用
 
-从 [Releases](https://github.com/jiangxin/kill-port/releases) 下载最新安装包，或自行构建：
+从 [Releases](https://github.com/jiangxin/kill-port/releases) 下载 `kill-port.exe` 后双击运行，或自行构建：
 
 ```bash
 pnpm install
 pnpm tauri build
 ```
 
-构建产物在 `src-tauri/target/release/bundle/nsis/`。
+构建产物为 `src-tauri/target/release/kill-port.exe`。如果构建时报“拒绝访问”，先关闭正在运行的 `kill-port.exe` 再重新构建。
 
 ## 开发
 

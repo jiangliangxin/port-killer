@@ -153,6 +153,9 @@ th, td {
 }
 
 th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background-color: #fafafa;
   font-weight: 600;
   font-size: 13px;
@@ -176,6 +179,22 @@ th.sortable.active {
 
 tr:hover {
   background-color: #f9f9f9;
+}
+
+tr.selected-row {
+  background-color: #eaf3ff;
+}
+
+tr.selected-row:hover {
+  background-color: #dbeaff;
+}
+
+.port-list tbody tr {
+  cursor: pointer;
+}
+
+.port-list input[type="checkbox"] {
+  cursor: pointer;
 }
 
 .empty-state {

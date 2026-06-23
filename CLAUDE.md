@@ -18,7 +18,8 @@ pnpm tauri build      # 生产构建
 
 构建产物：
 - 可执行文件：`src-tauri/target/release/kill-port.exe`
-- 安装包：`src-tauri/target/release/bundle/nsis/`
+
+当前发布目标是点击即用的单文件 exe，不生成安装包。
 
 ## Architecture
 

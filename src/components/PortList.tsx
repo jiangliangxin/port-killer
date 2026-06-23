@@ -2,8 +2,8 @@ import { PortInfo, SortConfig, SortField } from "../types/port";
 
 interface PortListProps {
   ports: PortInfo[];
-  selectedPids: Set<number>;
-  onTogglePid: (pid: number) => void;
+  selected: Record<string, boolean>;
+  onToggleRow: (id: string) => void;
   sortConfig: SortConfig;
   onSort: (field: SortField) => void;
 }
@@ -29,7 +29,7 @@ function SortableHeader({ label, field, sortConfig, onSort }: SortableHeaderProp
   );
 }
 
-export function PortList({ ports, selectedPids, onTogglePid, sortConfig, onSort }: PortListProps) {
+export function PortList({ ports, selected, onToggleRow, sortConfig, onSort }: PortListProps) {
   if (ports.length === 0) {
     return <div className="empty-state">暂无端口占用数据</div>;
   }
@@ -49,13 +49,18 @@ export function PortList({ ports, selectedPids, onTogglePid, sortConfig, onSort 
           </tr>
         </thead>
         <tbody>
-          {ports.map((port, index) => (
-            <tr key={`${port.pid}-${port.port}-${index}`}>
+          {ports.map((port) => (
+            <tr
+              key={port.id}
+              className={selected[port.id] ? "selected-row" : ""}
+              onClick={() => onToggleRow(port.id)}
+            >
               <td>
                 <input
                   type="checkbox"
-                  checked={selectedPids.has(port.pid)}
-                  onChange={() => onTogglePid(port.pid)}
+                  checked={!!selected[port.id]}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={() => onToggleRow(port.id)}
                 />
               </td>
               <td>{port.port}</td>

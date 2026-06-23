@@ -4,21 +4,21 @@ import { usePorts } from "./hooks/usePorts";
 import { SearchBar } from "./components/SearchBar";
 import { PortList } from "./components/PortList";
 import { ActionBar } from "./components/ActionBar";
-import { KillResult, SortConfig, SortField } from "./types/port";
+import { KillResult, KillTarget, SortConfig, SortField } from "./types/port";
 
 const DEFAULT_SORT: SortConfig = { field: "port", order: "asc" };
 
 function App() {
   const { ports, loading, error, scanPorts } = usePorts();
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedPids, setSelectedPids] = useState<Set<number>>(new Set());
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [isKilling, setIsKilling] = useState(false);
   const [killResults, setKillResults] = useState<KillResult[]>([]);
   const [sortConfig, setSortConfig] = useState<SortConfig>(DEFAULT_SORT);
   const [showConfirm, setShowConfirm] = useState(false);
   const [autoRefresh, setAutoRefresh] = useState(false);
 
-  // 自动刷新
+  // 自动刷新端口列表，适合排查 dev server 反复占用端口的场景。
   useEffect(() => {
     if (!autoRefresh) return;
     const interval = setInterval(() => {
@@ -26,6 +26,24 @@ function App() {
     }, 5000);
     return () => clearInterval(interval);
   }, [autoRefresh, scanPorts]);
+
+  useEffect(() => {
+    const validIds = new Set(ports.map((port) => port.id));
+    setSelected((prev) => {
+      const next: Record<string, boolean> = {};
+      let changed = false;
+
+      for (const id of Object.keys(prev)) {
+        if (validIds.has(id)) {
+          next[id] = true;
+        } else {
+          changed = true;
+        }
+      }
+
+      return changed ? next : prev;
+    });
+  }, [ports]);
 
   const handleSort = useCallback((field: SortField) => {
     setSortConfig((prev) => ({
@@ -36,13 +54,17 @@ function App() {
 
   const filteredAndSortedPorts = useMemo(() => {
     let result = ports;
+    const query = searchQuery.trim().toLowerCase();
 
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (query) {
       result = result.filter(
         (port) =>
-          port.port.toString().includes(searchQuery) ||
-          port.processName.toLowerCase().includes(query)
+          port.port.toString().includes(query) ||
+          port.pid.toString().includes(query) ||
+          port.protocol.toLowerCase().includes(query) ||
+          port.processName.toLowerCase().includes(query) ||
+          port.state.toLowerCase().includes(query) ||
+          port.localAddress.toLowerCase().includes(query)
       );
     }
 
@@ -65,50 +87,62 @@ function App() {
     return result;
   }, [ports, searchQuery, sortConfig]);
 
-  const togglePid = (pid: number) => {
-    setSelectedPids((prev) => {
-      const next = new Set(prev);
-      if (next.has(pid)) {
-        next.delete(pid);
+  const selectedPorts = useMemo(
+    () => ports.filter((port) => selected[port.id]),
+    [ports, selected]
+  );
+
+  const selectedPortCount = selectedPorts.length;
+  const selectedProcessCount = useMemo(
+    () => new Set(selectedPorts.map((port) => port.pid)).size,
+    [selectedPorts]
+  );
+
+  const toggleRow = useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = { ...prev };
+      if (next[id]) {
+        delete next[id];
       } else {
-        next.add(pid);
+        next[id] = true;
       }
       return next;
     });
-  };
+  }, []);
 
   const selectAll = useCallback(() => {
-    const allPids = new Set(filteredAndSortedPorts.map((p) => p.pid));
-    setSelectedPids(allPids);
+    const next: Record<string, boolean> = {};
+    for (const p of filteredAndSortedPorts) {
+      next[p.id] = true;
+    }
+    setSelected(next);
   }, [filteredAndSortedPorts]);
 
   const clearSelection = useCallback(() => {
-    setSelectedPids(new Set());
+    setSelected({});
   }, []);
 
-  const handleKill = () => {
-    if (selectedPids.size === 0) return;
+  const handleKill = useCallback(() => {
+    if (selectedPortCount === 0) return;
     setShowConfirm(true);
-  };
+  }, [selectedPortCount]);
 
   const confirmKill = async () => {
     setShowConfirm(false);
     setIsKilling(true);
     try {
+      const targets: KillTarget[] = selectedPorts.map((port) => ({
+        port: port.port,
+        protocol: port.protocol,
+        pid: port.pid,
+        localAddress: port.localAddress,
+      }));
       const results = await invoke<KillResult[]>("kill_processes", {
-        pids: Array.from(selectedPids),
+        targets,
       });
       setKillResults(results);
 
-      const successPids = results
-        .filter((r) => r.success)
-        .map((r) => r.pid);
-      setSelectedPids((prev) => {
-        const next = new Set(prev);
-        successPids.forEach((pid) => next.delete(pid));
-        return next;
-      });
-
+      setSelected({});
       await scanPorts();
     } catch (e) {
       console.error("Failed to kill processes:", e);
@@ -125,8 +159,8 @@ function App() {
 
       <main>
         <ActionBar
-          selectedCount={selectedPids.size}
-          totalCount={new Set(filteredAndSortedPorts.map(p => p.pid)).size}
+          selectedCount={selectedProcessCount}
+          totalCount={filteredAndSortedPorts.length}
           onRefresh={scanPorts}
           onKill={handleKill}
           onSelectAll={selectAll}
@@ -143,8 +177,8 @@ function App() {
 
         <PortList
           ports={filteredAndSortedPorts}
-          selectedPids={selectedPids}
-          onTogglePid={togglePid}
+          selected={selected}
+          onToggleRow={toggleRow}
           sortConfig={sortConfig}
           onSort={handleSort}
         />
@@ -170,7 +204,9 @@ function App() {
         <div className="modal-overlay">
           <div className="modal">
             <h3>确认终止进程</h3>
-            <p>确定要终止选中的 {selectedPids.size} 个进程吗？</p>
+            <p>
+              确定要终止 {selectedProcessCount} 个进程吗？涉及 {selectedPortCount} 条端口记录。
+            </p>
             <p className="warning">警告：强制终止可能导致数据丢失</p>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowConfirm(false)}>

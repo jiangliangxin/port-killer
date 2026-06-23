@@ -4,7 +4,7 @@ mod port_scanner;
 mod process_killer;
 
 use port_scanner::PortInfo;
-use process_killer::KillResult;
+use process_killer::{KillResult, KillTarget};
 
 #[tauri::command]
 fn scan_ports() -> Result<Vec<PortInfo>, String> {
@@ -12,13 +12,9 @@ fn scan_ports() -> Result<Vec<PortInfo>, String> {
 }
 
 #[tauri::command]
-fn kill_process(pid: u32) -> Result<KillResult, String> {
-    Ok(process_killer::kill_process(pid))
-}
-
-#[tauri::command]
-fn kill_processes(pids: Vec<u32>) -> Result<Vec<KillResult>, String> {
-    Ok(pids.into_iter().map(process_killer::kill_process).collect())
+fn kill_processes(targets: Vec<KillTarget>) -> Result<Vec<KillResult>, String> {
+    let current_ports = port_scanner::scan_ports().map_err(|e| e.to_string())?;
+    Ok(process_killer::kill_processes(&targets, &current_ports))
 }
 
 fn main() {
@@ -34,7 +30,7 @@ fn main() {
             let _ = app;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![scan_ports, kill_process, kill_processes])
+        .invoke_handler(tauri::generate_handler![scan_ports, kill_processes])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

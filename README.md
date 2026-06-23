@@ -18,16 +18,18 @@ Windows 端口占用管理工具，扫描端口占用，一键终止进程。
 
 ```bash
 pnpm install
-pnpm tauri build
+pnpm release
 ```
 
-构建产物为 `src-tauri/target/release/kill-port.exe`。如果构建时报“拒绝访问”，先关闭正在运行的 `kill-port.exe` 再重新构建。
+便携版产物为 `release/端口占用管理工具.exe`，可直接双击运行；同时会生成 `release/端口占用管理工具.sha256.txt` 便于校验。  
+如果构建时报“拒绝访问”，先关闭正在运行的 exe 再重新构建。
 
 ## 开发
 
 ```bash
 pnpm install       # 安装前端依赖
 pnpm tauri dev     # 启动开发模式（热重载 + DevTools）
+pnpm release       # 生成点击即用的便携版 exe
 ```
 
 ## 技术栈

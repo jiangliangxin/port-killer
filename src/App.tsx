@@ -7,6 +7,14 @@ import { ActionBar } from "./components/ActionBar";
 import { AppStatus, KillResult, KillTarget, SortConfig, SortField } from "./types/port";
 
 const DEFAULT_SORT: SortConfig = { field: "port", order: "asc" };
+const CONFIRM_PREVIEW_LIMIT = 6;
+
+interface SelectedProcessSummary {
+  pid: number;
+  processName: string;
+  ports: number[];
+  processPath: string;
+}
 
 function App() {
   const { ports, loading, error, scanPorts } = usePorts();
@@ -108,6 +116,28 @@ function App() {
     () => new Set(selectedPorts.map((port) => port.pid)).size,
     [selectedPorts]
   );
+  const selectedProcessSummaries = useMemo<SelectedProcessSummary[]>(() => {
+    const groups = new Map<number, SelectedProcessSummary>();
+
+    for (const port of selectedPorts) {
+      const group = groups.get(port.pid);
+      if (group) {
+        group.ports.push(port.port);
+      } else {
+        groups.set(port.pid, {
+          pid: port.pid,
+          processName: port.processName,
+          ports: [port.port],
+          processPath: port.processPath,
+        });
+      }
+    }
+
+    return Array.from(groups.values()).map((group) => ({
+      ...group,
+      ports: Array.from(new Set(group.ports)).sort((a, b) => a - b),
+    }));
+  }, [selectedPorts]);
 
   const filteredProcessCount = useMemo(
     () => new Set(filteredAndSortedPorts.map((port) => port.pid)).size,
@@ -284,6 +314,21 @@ function App() {
             <p>
               确定要关闭 {selectedProcessCount} 个进程吗？涉及 {selectedPortCount} 条端口记录。
             </p>
+            <div className="confirm-process-list">
+              {selectedProcessSummaries.slice(0, CONFIRM_PREVIEW_LIMIT).map((process) => (
+                <div className="confirm-process-item" key={process.pid} title={process.processPath}>
+                  <span className="confirm-process-name">{process.processName}</span>
+                  <span className="confirm-process-meta">
+                    PID {process.pid} · 端口 {process.ports.join(", ")}
+                  </span>
+                </div>
+              ))}
+              {selectedProcessSummaries.length > CONFIRM_PREVIEW_LIMIT && (
+                <div className="confirm-process-more">
+                  还有 {selectedProcessSummaries.length - CONFIRM_PREVIEW_LIMIT} 个进程未显示
+                </div>
+              )}
+            </div>
             <p className="warning">建议先正常关闭；端口未释放时再强制关闭。</p>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowConfirm(false)}>

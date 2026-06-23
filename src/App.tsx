@@ -100,25 +100,52 @@ function App() {
     [selectedPorts]
   );
 
-  const toggleRow = useCallback((id: string) => {
-    setSelected((prev) => {
-      const next = { ...prev };
-      if (next[id]) {
-        delete next[id];
-      } else {
-        next[id] = true;
-      }
-      return next;
-    });
-  }, []);
+  const filteredProcessCount = useMemo(
+    () => new Set(filteredAndSortedPorts.map((port) => port.pid)).size,
+    [filteredAndSortedPorts]
+  );
+
+  const visibleProcessPorts = useMemo(() => {
+    const visiblePids = new Set(filteredAndSortedPorts.map((port) => port.pid));
+    return ports.filter((port) => visiblePids.has(port.pid));
+  }, [filteredAndSortedPorts, ports]);
+
+  const matchedPortIds = useMemo(
+    () => new Set(filteredAndSortedPorts.map((port) => port.id)),
+    [filteredAndSortedPorts]
+  );
+
+  const toggleProcess = useCallback(
+    (pid: number) => {
+      const processPorts = ports.filter((port) => port.pid === pid);
+
+      setSelected((prev) => {
+        // 关闭动作是按进程执行的，所以点选进程时同步选中该 PID 的全部端口记录。
+        const allSelected = processPorts.every((port) => prev[port.id]);
+        const next = { ...prev };
+        for (const port of processPorts) {
+          if (allSelected) {
+            delete next[port.id];
+          } else {
+            next[port.id] = true;
+          }
+        }
+        return next;
+      });
+    },
+    [ports]
+  );
 
   const selectAll = useCallback(() => {
     const next: Record<string, boolean> = {};
-    for (const p of filteredAndSortedPorts) {
-      next[p.id] = true;
+    const visiblePids = new Set(filteredAndSortedPorts.map((port) => port.pid));
+    for (const port of ports) {
+      if (visiblePids.has(port.pid)) {
+        next[port.id] = true;
+      }
     }
     setSelected(next);
-  }, [filteredAndSortedPorts]);
+  }, [filteredAndSortedPorts, ports]);
 
   const clearSelection = useCallback(() => {
     setSelected({});
@@ -184,7 +211,7 @@ function App() {
       <main>
         <ActionBar
           selectedCount={selectedProcessCount}
-          totalCount={filteredAndSortedPorts.length}
+          totalCount={filteredProcessCount}
           onRefresh={scanPorts}
           onKill={handleKill}
           onSelectAll={selectAll}
@@ -200,9 +227,10 @@ function App() {
         {error && <div className="error">{error}</div>}
 
         <PortList
-          ports={filteredAndSortedPorts}
+          ports={visibleProcessPorts}
+          matchedPortIds={matchedPortIds}
           selected={selected}
-          onToggleRow={toggleRow}
+          onToggleProcess={toggleProcess}
           sortConfig={sortConfig}
           onSort={handleSort}
         />

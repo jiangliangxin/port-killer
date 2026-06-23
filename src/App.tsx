@@ -295,7 +295,7 @@ function App() {
                 className={
                   result.success
                     ? "success"
-                    : result.status === "permissionDenied"
+                    : result.status === "permissionDenied" || result.status === "reoccupied"
                       ? "warning"
                       : "failed"
                 }

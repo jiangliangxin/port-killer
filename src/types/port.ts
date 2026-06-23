@@ -22,7 +22,14 @@ export interface KillTarget {
 export interface KillResult {
   pid: number;
   success: boolean;
-  status: "released" | "notReleased" | "skipped" | "failed" | "closed" | "permissionDenied";
+  status:
+    | "released"
+    | "notReleased"
+    | "skipped"
+    | "failed"
+    | "closed"
+    | "permissionDenied"
+    | "reoccupied";
   message: string;
 }
 

@@ -1,12 +1,18 @@
 use crate::port_scanner::PortInfo;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::ErrorKind;
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+enum ReleaseCheckStatus {
+    Released,
+    StillOwned,
+    Reoccupied(Vec<u32>),
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -64,23 +70,74 @@ fn target_still_matches(target: &KillTarget, port: &PortInfo) -> bool {
         && target.local_address == port.local_address
 }
 
-fn targets_released(targets: &[KillTarget], ports: &[PortInfo]) -> bool {
-    !targets
+fn target_endpoint_matches(target: &KillTarget, port: &PortInfo) -> bool {
+    target.port == port.port
+        && target.protocol == port.protocol
+        && target.local_address == port.local_address
+}
+
+fn original_targets_still_owned(targets: &[KillTarget], ports: &[PortInfo]) -> bool {
+    targets
         .iter()
         .any(|target| ports.iter().any(|port| target_still_matches(target, port)))
 }
 
-fn wait_until_released(targets: &[KillTarget], timeout: Duration) -> Result<bool, String> {
+fn target_endpoints_still_occupied(targets: &[KillTarget], ports: &[PortInfo]) -> bool {
+    targets.iter().any(|target| {
+        ports
+            .iter()
+            .any(|port| target_endpoint_matches(target, port))
+    })
+}
+
+fn reoccupying_pids(targets: &[KillTarget], ports: &[PortInfo]) -> Vec<u32> {
+    let mut pids = BTreeSet::new();
+    for target in targets {
+        for port in ports {
+            if target_endpoint_matches(target, port) && !target_still_matches(target, port) {
+                pids.insert(port.pid);
+            }
+        }
+    }
+    pids.into_iter().collect()
+}
+
+fn wait_until_released(
+    targets: &[KillTarget],
+    timeout: Duration,
+) -> Result<ReleaseCheckStatus, String> {
     let start = Instant::now();
+    let stable_free_duration = Duration::from_millis(300);
+    let mut free_since: Option<Instant> = None;
 
     loop {
         let ports = crate::port_scanner::scan_ports().map_err(|e| e.to_string())?;
-        if targets_released(targets, &ports) {
-            return Ok(true);
+        let original_still_owned = original_targets_still_owned(targets, &ports);
+        let endpoint_still_occupied = target_endpoints_still_occupied(targets, &ports);
+
+        if !endpoint_still_occupied {
+            let free_start = free_since.get_or_insert_with(Instant::now);
+            if free_start.elapsed() >= stable_free_duration {
+                return Ok(ReleaseCheckStatus::Released);
+            }
+        } else {
+            free_since = None;
+        }
+
+        if !original_still_owned && endpoint_still_occupied {
+            return Ok(ReleaseCheckStatus::Reoccupied(reoccupying_pids(
+                targets, &ports,
+            )));
         }
 
         if start.elapsed() >= timeout {
-            return Ok(false);
+            return if original_still_owned {
+                Ok(ReleaseCheckStatus::StillOwned)
+            } else {
+                Ok(ReleaseCheckStatus::Reoccupied(reoccupying_pids(
+                    targets, &ports,
+                )))
+            };
         }
 
         std::thread::sleep(Duration::from_millis(150));
@@ -186,7 +243,7 @@ fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bo
     }
 
     match wait_until_released(&targets, Duration::from_secs(2)) {
-        Ok(true) => KillResult {
+        Ok(ReleaseCheckStatus::Released) => KillResult {
             pid,
             success: true,
             status: "released".to_string(),
@@ -196,7 +253,7 @@ fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bo
                 "已正常关闭并释放端口".to_string()
             },
         },
-        Ok(false) => KillResult {
+        Ok(ReleaseCheckStatus::StillOwned) => KillResult {
             pid,
             success: false,
             status: "notReleased".to_string(),
@@ -204,6 +261,22 @@ fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bo
                 "已执行强制关闭，但端口仍未释放".to_string()
             } else {
                 "正常关闭后端口仍未释放，可尝试强制关闭".to_string()
+            },
+        },
+        Ok(ReleaseCheckStatus::Reoccupied(pids)) => KillResult {
+            pid,
+            success: false,
+            status: "reoccupied".to_string(),
+            message: if pids.is_empty() {
+                "原进程已关闭，但端口又被其他进程占用".to_string()
+            } else {
+                format!(
+                    "原进程已关闭，但端口又被 PID {} 占用",
+                    pids.iter()
+                        .map(u32::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
             },
         },
         Err(e) => KillResult {

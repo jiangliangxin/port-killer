@@ -17,12 +17,11 @@
         "minWidth": 640,
         "minHeight": 400,
         "resizable": true,
-        "fullscreen": false,
-        "icon": "icons/icon.png"
+        "fullscreen": false
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' asset: data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
     }
   },
   "bundle": {

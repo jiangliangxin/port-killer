@@ -23,7 +23,6 @@ fn kill_processes(targets: Vec<KillTarget>, force: bool) -> Result<Vec<KillResul
 
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
         .setup(|app| {
             #[cfg(debug_assertions)]
             {

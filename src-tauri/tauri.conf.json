@@ -1,7 +1,7 @@
 {
   "productName": "端口占用管理工具",
   "version": "0.1.0",
-  "identifier": "com.killport.app",
+  "identifier": "com.killport.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",

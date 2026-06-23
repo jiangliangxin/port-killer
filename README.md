@@ -1,34 +1,40 @@
 # Kill Port
 
-Windows 端口占用管理工具
+用 AI 写前端的时候，每次启动 dev server 都会开一个端口。任务一多，端口越积越多，不是忘了关就是端口冲突 — 烦了，所以写了这个。
 
-## 环境要求
+Windows 端口占用管理工具，扫描端口占用，一键终止进程。
 
-- Node.js 18+
-- pnpm
-- **Rust** (必需) - [安装 Rust](https://www.rust-lang.org/tools/install)
+## 功能
 
-安装 Rust (Windows):
-```powershell
-# 下载并运行 rustup-init.exe
-# 或使用 winget
-winget install Rustlang.Rustup
+- 扫描 TCP/UDP（IPv4/IPv6）端口占用
+- 按端口、PID、进程名等排序和搜索
+- 勾选进程并批量终止（`taskkill /F`）
+- 自动刷新
+
+## 安装
+
+从 [Releases](https://github.com/jiangxin/kill-port/releases) 下载最新安装包，或自行构建：
+
+```bash
+pnpm install
+pnpm tauri build
 ```
+
+构建产物在 `src-tauri/target/release/bundle/nsis/`。
 
 ## 开发
 
 ```bash
-# 安装依赖
-pnpm install
-
-# 启动开发模式
-pnpm tauri dev
+pnpm install       # 安装前端依赖
+pnpm tauri dev     # 启动开发模式（热重载 + DevTools）
 ```
 
-## 构建
+## 技术栈
 
-```bash
-pnpm tauri build
-```
+- **前端**: React 18 + TypeScript + Vite
+- **后端**: Rust + Tauri 2.0
+- **Windows API**: `GetExtendedTcpTable` / `GetExtendedUdpTable` / `CreateToolhelp32Snapshot`
 
-构建产物位于 `src-tauri/target/release/bundle/` 目录。
+## 许可证
+
+[MIT](LICENSE)

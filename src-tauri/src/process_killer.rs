@@ -5,6 +5,7 @@ use std::io::ErrorKind;
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
+use windows::Win32::Globalization::{GetOEMCP, MultiByteToWideChar, MULTI_BYTE_TO_WIDE_CHAR_FLAGS};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
@@ -32,13 +33,38 @@ pub struct KillResult {
     pub message: String,
 }
 
+fn decode_command_output(bytes: &[u8]) -> String {
+    if bytes.is_empty() {
+        return String::new();
+    }
+
+    unsafe {
+        let code_page = GetOEMCP();
+        let len = MultiByteToWideChar(code_page, MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0), bytes, None);
+        if len > 0 {
+            let mut wide = vec![0u16; len as usize];
+            let written = MultiByteToWideChar(
+                code_page,
+                MULTI_BYTE_TO_WIDE_CHAR_FLAGS(0),
+                bytes,
+                Some(&mut wide),
+            );
+            if written > 0 {
+                return String::from_utf16_lossy(&wide[..written as usize]);
+            }
+        }
+    }
+
+    String::from_utf8_lossy(bytes).to_string()
+}
+
 fn output_message(output: Output) -> String {
-    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stderr = decode_command_output(&output.stderr).trim().to_string();
     if !stderr.is_empty() {
         return stderr;
     }
 
-    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stdout = decode_command_output(&output.stdout).trim().to_string();
     if !stdout.is_empty() {
         return stdout;
     }
@@ -52,6 +78,14 @@ fn is_permission_denied_message(message: &str) -> bool {
         || lower.contains("permission")
         || message.contains("拒绝访问")
         || message.contains("权限")
+}
+
+fn requires_force_message(message: &str) -> bool {
+    let lower = message.to_lowercase();
+    lower.contains("/f")
+        || lower.contains("forcefully")
+        || lower.contains("force")
+        || message.contains("强制")
 }
 
 fn permission_denied_result(pid: u32) -> KillResult {
@@ -201,6 +235,15 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
                         .unwrap_or_else(|| "未知错误".to_string());
                     if is_permission_denied_message(&message) {
                         return permission_denied_result(pid);
+                    }
+                    if !force && requires_force_message(&message) {
+                        return KillResult {
+                            pid,
+                            success: false,
+                            status: "notReleased".to_string(),
+                            message: "正常关闭失败：该进程需要使用强制结束，可点击“强制关闭”重试"
+                                .to_string(),
+                        };
                     }
 
                     return KillResult {

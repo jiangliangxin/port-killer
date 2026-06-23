@@ -20,6 +20,35 @@ body {
   overflow: hidden;
 }
 
+.app * {
+  scrollbar-width: thin;
+  scrollbar-color: #a8b6c5 #edf1f5;
+}
+
+.app *::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.app *::-webkit-scrollbar-track {
+  background: #edf1f5;
+  border-radius: 999px;
+}
+
+.app *::-webkit-scrollbar-thumb {
+  background: #a8b6c5;
+  border: 2px solid #edf1f5;
+  border-radius: 999px;
+}
+
+.app *::-webkit-scrollbar-thumb:hover {
+  background: #8798aa;
+}
+
+.app *::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 header {
   flex-shrink: 0;
   margin-bottom: 16px;
@@ -79,6 +108,7 @@ main {
 .action-bar {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 12px;
 }
@@ -180,8 +210,34 @@ button {
 
 table {
   width: 100%;
-  min-width: 1080px;
+  min-width: 1180px;
+  table-layout: fixed;
   border-collapse: collapse;
+}
+
+th:nth-child(1),
+td:nth-child(1) {
+  width: 72px;
+}
+
+th:nth-child(2),
+td:nth-child(2) {
+  width: 180px;
+}
+
+th:nth-child(3),
+td:nth-child(3) {
+  width: 92px;
+}
+
+th:nth-child(4),
+td:nth-child(4) {
+  width: 250px;
+}
+
+th:nth-child(5),
+td:nth-child(5) {
+  width: 280px;
 }
 
 th, td {
@@ -191,17 +247,39 @@ th, td {
 }
 
 .path-cell {
-  max-width: 300px;
+  max-width: 280px;
+}
+
+.path-text {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .command-cell {
-  max-width: 380px;
+  min-width: 360px;
+}
+
+.command-text {
+  display: -webkit-box;
+  max-height: 42px;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #4b5563;
+  font-family: Consolas, "SFMono-Regular", "Cascadia Mono", monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.command-cell:hover .command-text {
+  display: block;
+  max-height: 160px;
+  overflow: auto;
+  padding-right: 6px;
+  -webkit-line-clamp: unset;
 }
 
 .process-cell {

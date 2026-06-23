@@ -199,10 +199,10 @@ export function PortList({
                   </div>
                 </td>
                 <td className="path-cell" title={group.processPath}>
-                  {group.processPath || "-"}
+                  <div className="path-text">{group.processPath || "-"}</div>
                 </td>
                 <td className="command-cell" title={group.commandLine}>
-                  {group.commandLine || "-"}
+                  <div className="command-text">{group.commandLine || "-"}</div>
                 </td>
               </tr>
             );

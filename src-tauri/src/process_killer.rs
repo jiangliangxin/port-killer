@@ -1,8 +1,11 @@
 use crate::port_scanner::PortInfo;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use std::os::windows::process::CommandExt;
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
+
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -79,6 +82,7 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
     let pid_arg = pid.to_string();
     let mut command = Command::new("taskkill");
     command.args(["/PID", pid_arg.as_str()]);
+    command.creation_flags(CREATE_NO_WINDOW);
     if force {
         command.arg("/F");
     }

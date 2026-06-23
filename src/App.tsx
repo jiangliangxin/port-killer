@@ -64,6 +64,7 @@ function App() {
           port.protocol.toLowerCase().includes(query) ||
           port.processName.toLowerCase().includes(query) ||
           port.processPath.toLowerCase().includes(query) ||
+          port.commandLine.toLowerCase().includes(query) ||
           port.state.toLowerCase().includes(query) ||
           port.localAddress.toLowerCase().includes(query)
       );

@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
+use std::os::windows::process::CommandExt;
+use std::process::Command;
 use windows::core::PWSTR;
 use windows::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER};
 use windows::Win32::NetworkManagement::IpHelper::{
@@ -21,6 +23,7 @@ const AF_INET6: u32 = 23;
 const TCP_TABLE_OWNER_PID_LISTENER: i32 = 3;
 // UDP_TABLE_OWNER_PID = 1
 const UDP_TABLE_OWNER_PID: i32 = 1;
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// IPv6 TCP 行结构（Windows API 未提供，手动定义）
 #[repr(C)]
@@ -70,6 +73,7 @@ pub struct PortInfo {
     pub pid: u32,
     pub process_name: String,
     pub process_path: String,
+    pub command_line: String,
     pub state: String,
     pub local_address: String,
 }
@@ -78,6 +82,7 @@ pub struct PortInfo {
 struct ProcessInfo {
     name: String,
     path: String,
+    command_line: String,
 }
 
 fn tcp_state_to_string(state: u32) -> String {
@@ -127,16 +132,71 @@ fn get_process_path(pid: u32) -> String {
     }
 }
 
+fn get_command_line_map() -> HashMap<u32, String> {
+    let mut map = HashMap::new();
+    let script = "[Console]::OutputEncoding=[Text.UTF8Encoding]::UTF8; \
+        Get-CimInstance Win32_Process | \
+        Select-Object ProcessId,CommandLine | \
+        ConvertTo-Json -Compress";
+
+    let output = match Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            script,
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return map,
+    };
+
+    let text = String::from_utf8_lossy(&output.stdout);
+    let value: serde_json::Value = match serde_json::from_str(text.trim()) {
+        Ok(value) => value,
+        Err(_) => return map,
+    };
+
+    let rows: Vec<serde_json::Value> = match value {
+        serde_json::Value::Array(rows) => rows,
+        serde_json::Value::Object(_) => vec![value],
+        _ => return map,
+    };
+
+    for row in rows {
+        let pid = row
+            .get("ProcessId")
+            .and_then(|value| value.as_u64())
+            .map(|value| value as u32);
+        let command_line = row
+            .get("CommandLine")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        if let Some(pid) = pid {
+            map.insert(pid, command_line);
+        }
+    }
+
+    map
+}
+
 fn process_info_for(process_map: &HashMap<u32, ProcessInfo>, pid: u32) -> ProcessInfo {
     process_map.get(&pid).cloned().unwrap_or(ProcessInfo {
         name: "Unknown".to_string(),
         path: String::new(),
+        command_line: String::new(),
     })
 }
 
 /// 一次性获取所有进程的 PID -> 进程信息映射
 fn get_process_info_map() -> HashMap<u32, ProcessInfo> {
     let mut map = HashMap::new();
+    let command_lines = get_command_line_map();
 
     // 添加系统进程
     map.insert(
@@ -144,6 +204,7 @@ fn get_process_info_map() -> HashMap<u32, ProcessInfo> {
         ProcessInfo {
             name: "System Idle Process".to_string(),
             path: String::new(),
+            command_line: String::new(),
         },
     );
     map.insert(
@@ -151,6 +212,7 @@ fn get_process_info_map() -> HashMap<u32, ProcessInfo> {
         ProcessInfo {
             name: "System".to_string(),
             path: String::new(),
+            command_line: String::new(),
         },
     );
 
@@ -180,6 +242,7 @@ fn get_process_info_map() -> HashMap<u32, ProcessInfo> {
                     ProcessInfo {
                         name,
                         path: get_process_path(pid),
+                        command_line: command_lines.get(&pid).cloned().unwrap_or_default(),
                     },
                 );
 
@@ -254,6 +317,7 @@ fn get_tcp_ports(
                 pid,
                 process_name: process.name,
                 process_path: process.path,
+                command_line: process.command_line,
                 state,
                 local_address: format!("{}:{}", ip, port),
             });
@@ -321,6 +385,7 @@ fn get_udp_ports(
                 pid,
                 process_name: process.name,
                 process_path: process.path,
+                command_line: process.command_line,
                 state: "BOUND".to_string(),
                 local_address: format!("{}:{}", ip, port),
             });
@@ -388,6 +453,7 @@ fn get_tcp6_ports(
                 pid,
                 process_name: process.name,
                 process_path: process.path,
+                command_line: process.command_line,
                 state,
                 local_address: format!("[{}]:{}", ip, port),
             });
@@ -454,6 +520,7 @@ fn get_udp6_ports(
                 pid,
                 process_name: process.name,
                 process_path: process.path,
+                command_line: process.command_line,
                 state: "BOUND".to_string(),
                 local_address: format!("[{}]:{}", ip, port),
             });

@@ -159,6 +159,13 @@ th, td {
   white-space: nowrap;
 }
 
+.command-cell {
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 th {
   position: sticky;
   top: 0;

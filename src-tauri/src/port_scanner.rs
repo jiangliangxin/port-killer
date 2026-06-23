@@ -1,13 +1,17 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use windows::Win32::Foundation::ERROR_INSUFFICIENT_BUFFER;
+use windows::core::PWSTR;
+use windows::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER};
 use windows::Win32::NetworkManagement::IpHelper::{
     GetExtendedTcpTable, GetExtendedUdpTable, MIB_TCPTABLE_OWNER_PID, MIB_UDPTABLE_OWNER_PID,
     TCP_TABLE_CLASS, UDP_TABLE_CLASS,
 };
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32First, Process32Next, PROCESSENTRY32, TH32CS_SNAPPROCESS,
+};
+use windows::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
 // AF_INET = 2, AF_INET6 = 23
@@ -65,8 +69,15 @@ pub struct PortInfo {
     pub protocol: String,
     pub pid: u32,
     pub process_name: String,
+    pub process_path: String,
     pub state: String,
     pub local_address: String,
+}
+
+#[derive(Debug, Clone)]
+struct ProcessInfo {
+    name: String,
+    path: String,
 }
 
 fn tcp_state_to_string(state: u32) -> String {
@@ -87,13 +98,61 @@ fn tcp_state_to_string(state: u32) -> String {
     }
 }
 
-/// 一次性获取所有进程的 PID -> 名称映射
-fn get_process_name_map() -> HashMap<u32, String> {
+fn get_process_path(pid: u32) -> String {
+    if pid <= 4 {
+        return String::new();
+    }
+
+    unsafe {
+        let handle = match OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) {
+            Ok(handle) => handle,
+            Err(_) => return String::new(),
+        };
+
+        let mut buffer = vec![0u16; 32768];
+        let mut size = buffer.len() as u32;
+        let result = QueryFullProcessImageNameW(
+            handle,
+            PROCESS_NAME_WIN32,
+            PWSTR(buffer.as_mut_ptr()),
+            &mut size,
+        );
+        let _ = CloseHandle(handle);
+
+        if result.is_ok() {
+            String::from_utf16_lossy(&buffer[..size as usize])
+        } else {
+            String::new()
+        }
+    }
+}
+
+fn process_info_for(process_map: &HashMap<u32, ProcessInfo>, pid: u32) -> ProcessInfo {
+    process_map.get(&pid).cloned().unwrap_or(ProcessInfo {
+        name: "Unknown".to_string(),
+        path: String::new(),
+    })
+}
+
+/// 一次性获取所有进程的 PID -> 进程信息映射
+fn get_process_info_map() -> HashMap<u32, ProcessInfo> {
     let mut map = HashMap::new();
 
     // 添加系统进程
-    map.insert(0, "System Idle Process".to_string());
-    map.insert(4, "System".to_string());
+    map.insert(
+        0,
+        ProcessInfo {
+            name: "System Idle Process".to_string(),
+            path: String::new(),
+        },
+    );
+    map.insert(
+        4,
+        ProcessInfo {
+            name: "System".to_string(),
+            path: String::new(),
+        },
+    );
 
     unsafe {
         let snapshot = match CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) {
@@ -114,8 +173,15 @@ fn get_process_name_map() -> HashMap<u32, String> {
                     .take_while(|&&b| b != 0)
                     .map(|&b| b as u8)
                     .collect();
+                let pid = entry.th32ProcessID;
                 let name = String::from_utf8_lossy(&bytes).to_string();
-                map.insert(entry.th32ProcessID, name);
+                map.insert(
+                    pid,
+                    ProcessInfo {
+                        name,
+                        path: get_process_path(pid),
+                    },
+                );
 
                 if Process32Next(snapshot, &mut entry).is_err() {
                     break;
@@ -123,14 +189,14 @@ fn get_process_name_map() -> HashMap<u32, String> {
             }
         }
 
-        let _ = windows::Win32::Foundation::CloseHandle(snapshot);
+        let _ = CloseHandle(snapshot);
     }
 
     map
 }
 
 fn get_tcp_ports(
-    process_map: &HashMap<u32, String>,
+    process_map: &HashMap<u32, ProcessInfo>,
 ) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     unsafe {
         let mut size: u32 = 0;
@@ -180,15 +246,14 @@ fn get_tcp_ports(
             let ip = Ipv4Addr::from(u32::from_be(row.dwLocalAddr));
             let pid = row.dwOwningPid;
             let state = tcp_state_to_string(row.dwState);
+            let process = process_info_for(process_map, pid);
 
             result.push(PortInfo {
                 port,
                 protocol: "TCP".to_string(),
                 pid,
-                process_name: process_map
-                    .get(&pid)
-                    .cloned()
-                    .unwrap_or_else(|| "Unknown".to_string()),
+                process_name: process.name,
+                process_path: process.path,
                 state,
                 local_address: format!("{}:{}", ip, port),
             });
@@ -199,7 +264,7 @@ fn get_tcp_ports(
 }
 
 fn get_udp_ports(
-    process_map: &HashMap<u32, String>,
+    process_map: &HashMap<u32, ProcessInfo>,
 ) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     unsafe {
         let mut size: u32 = 0;
@@ -248,15 +313,14 @@ fn get_udp_ports(
             let port = u16::from_be(row.dwLocalPort as u16);
             let ip = Ipv4Addr::from(u32::from_be(row.dwLocalAddr));
             let pid = row.dwOwningPid;
+            let process = process_info_for(process_map, pid);
 
             result.push(PortInfo {
                 port,
                 protocol: "UDP".to_string(),
                 pid,
-                process_name: process_map
-                    .get(&pid)
-                    .cloned()
-                    .unwrap_or_else(|| "Unknown".to_string()),
+                process_name: process.name,
+                process_path: process.path,
                 state: "BOUND".to_string(),
                 local_address: format!("{}:{}", ip, port),
             });
@@ -267,7 +331,7 @@ fn get_udp_ports(
 }
 
 fn get_tcp6_ports(
-    process_map: &HashMap<u32, String>,
+    process_map: &HashMap<u32, ProcessInfo>,
 ) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     unsafe {
         let mut size: u32 = 0;
@@ -316,15 +380,14 @@ fn get_tcp6_ports(
             let ip = Ipv6Addr::from(row.ucLocalAddr);
             let pid = row.dwOwningPid;
             let state = tcp_state_to_string(row.dwState);
+            let process = process_info_for(process_map, pid);
 
             result.push(PortInfo {
                 port,
                 protocol: "TCP6".to_string(),
                 pid,
-                process_name: process_map
-                    .get(&pid)
-                    .cloned()
-                    .unwrap_or_else(|| "Unknown".to_string()),
+                process_name: process.name,
+                process_path: process.path,
                 state,
                 local_address: format!("[{}]:{}", ip, port),
             });
@@ -335,7 +398,7 @@ fn get_tcp6_ports(
 }
 
 fn get_udp6_ports(
-    process_map: &HashMap<u32, String>,
+    process_map: &HashMap<u32, ProcessInfo>,
 ) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     unsafe {
         let mut size: u32 = 0;
@@ -383,15 +446,14 @@ fn get_udp6_ports(
             let port = u16::from_be(row.dwLocalPort as u16);
             let ip = Ipv6Addr::from(row.ucLocalAddr);
             let pid = row.dwOwningPid;
+            let process = process_info_for(process_map, pid);
 
             result.push(PortInfo {
                 port,
                 protocol: "UDP6".to_string(),
                 pid,
-                process_name: process_map
-                    .get(&pid)
-                    .cloned()
-                    .unwrap_or_else(|| "Unknown".to_string()),
+                process_name: process.name,
+                process_path: process.path,
                 state: "BOUND".to_string(),
                 local_address: format!("[{}]:{}", ip, port),
             });
@@ -402,7 +464,7 @@ fn get_udp6_ports(
 }
 
 pub fn scan_ports() -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
-    let process_map = get_process_name_map();
+    let process_map = get_process_info_map();
     let mut ports = Vec::new();
 
     ports.extend(get_tcp_ports(&process_map)?);

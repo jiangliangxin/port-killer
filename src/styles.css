@@ -152,6 +152,13 @@ th, td {
   border-bottom: 1px solid #eee;
 }
 
+.path-cell {
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 th {
   position: sticky;
   top: 0;

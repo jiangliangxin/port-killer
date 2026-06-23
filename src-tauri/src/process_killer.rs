@@ -18,6 +18,7 @@ pub struct KillTarget {
 pub struct KillResult {
     pub pid: u32,
     pub success: bool,
+    pub status: String,
     pub message: String,
 }
 
@@ -70,6 +71,7 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
         return KillResult {
             pid,
             success: false,
+            status: "failed".to_string(),
             message: "无法终止系统进程".to_string(),
         };
     }
@@ -91,6 +93,7 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
             return KillResult {
                 pid,
                 success: false,
+                status: "failed".to_string(),
                 message: format!("启动 taskkill 失败: {}", e),
             }
         }
@@ -104,6 +107,7 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
                     return KillResult {
                         pid,
                         success: true,
+                        status: "closed".to_string(),
                         message: "已成功终止".to_string(),
                     };
                 } else {
@@ -115,6 +119,7 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
                     return KillResult {
                         pid,
                         success: false,
+                        status: "failed".to_string(),
                         message,
                     };
                 }
@@ -126,6 +131,7 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
                     return KillResult {
                         pid,
                         success: false,
+                        status: "failed".to_string(),
                         message: "终止超时".to_string(),
                     };
                 }
@@ -135,6 +141,7 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
                 return KillResult {
                     pid,
                     success: false,
+                    status: "failed".to_string(),
                     message: format!("等待 taskkill 失败: {}", e),
                 }
             }
@@ -152,6 +159,7 @@ fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bo
         Ok(true) => KillResult {
             pid,
             success: true,
+            status: "released".to_string(),
             message: if force {
                 "已强制关闭并释放端口".to_string()
             } else {
@@ -161,6 +169,7 @@ fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bo
         Ok(false) => KillResult {
             pid,
             success: false,
+            status: "notReleased".to_string(),
             message: if force {
                 "已执行强制关闭，但端口仍未释放".to_string()
             } else {
@@ -170,6 +179,7 @@ fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bo
         Err(e) => KillResult {
             pid,
             success: false,
+            status: "failed".to_string(),
             message: format!("已执行关闭，但复查端口失败: {}", e),
         },
     }
@@ -197,6 +207,7 @@ pub fn kill_processes(
             skipped.push(KillResult {
                 pid: target.pid,
                 success: false,
+                status: "skipped".to_string(),
                 message: format!("{} 已不再由该进程占用，已跳过", target.local_address),
             });
         }
@@ -211,6 +222,7 @@ pub fn kill_processes(
                 h.join().unwrap_or(KillResult {
                     pid: 0,
                     success: false,
+                    status: "failed".to_string(),
                     message: "线程执行失败".to_string(),
                 })
             })

@@ -63,6 +63,7 @@ function App() {
           port.pid.toString().includes(query) ||
           port.protocol.toLowerCase().includes(query) ||
           port.processName.toLowerCase().includes(query) ||
+          port.processPath.toLowerCase().includes(query) ||
           port.state.toLowerCase().includes(query) ||
           port.localAddress.toLowerCase().includes(query)
       );
@@ -143,7 +144,20 @@ function App() {
       });
       setKillResults(results);
 
-      setSelected({});
+      const releasedPids = new Set(
+        results
+          .filter((result) => result.success || result.status === "released")
+          .map((result) => result.pid)
+      );
+      setSelected((prev) => {
+        const next = { ...prev };
+        for (const port of selectedPorts) {
+          if (releasedPids.has(port.pid)) {
+            delete next[port.id];
+          }
+        }
+        return next;
+      });
       await scanPorts();
     } catch (e) {
       console.error("Failed to kill processes:", e);
@@ -151,6 +165,7 @@ function App() {
         {
           pid: 0,
           success: false,
+          status: "failed",
           message: `关闭失败: ${String(e)}`,
         },
       ]);
@@ -196,9 +211,9 @@ function App() {
         <div className="kill-results">
           <h3>操作结果</h3>
           <ul>
-            {killResults.map((result) => (
+            {killResults.map((result, index) => (
               <li
-                key={result.pid}
+                key={`${result.pid}-${result.status}-${index}`}
                 className={result.success ? "success" : "failed"}
               >
                 PID {result.pid}: {result.message}

@@ -44,6 +44,7 @@ export function PortList({ ports, selected, onToggleRow, sortConfig, onSort }: P
             <SortableHeader label="协议" field="protocol" sortConfig={sortConfig} onSort={onSort} />
             <SortableHeader label="PID" field="pid" sortConfig={sortConfig} onSort={onSort} />
             <SortableHeader label="进程名" field="processName" sortConfig={sortConfig} onSort={onSort} />
+            <SortableHeader label="路径" field="processPath" sortConfig={sortConfig} onSort={onSort} />
             <SortableHeader label="状态" field="state" sortConfig={sortConfig} onSort={onSort} />
             <SortableHeader label="本地地址" field="localAddress" sortConfig={sortConfig} onSort={onSort} />
           </tr>
@@ -67,6 +68,9 @@ export function PortList({ ports, selected, onToggleRow, sortConfig, onSort }: P
               <td>{port.protocol}</td>
               <td>{port.pid}</td>
               <td>{port.processName}</td>
+              <td className="path-cell" title={port.processPath}>
+                {port.processPath || "-"}
+              </td>
               <td>{port.state}</td>
               <td>{port.localAddress}</td>
             </tr>

@@ -4,6 +4,7 @@ export interface PortInfo {
   protocol: string;
   pid: number;
   processName: string;
+  processPath: string;
   state: string;
   localAddress: string;
 }
@@ -20,10 +21,11 @@ export interface KillTarget {
 export interface KillResult {
   pid: number;
   success: boolean;
+  status: "released" | "notReleased" | "skipped" | "failed" | "closed";
   message: string;
 }
 
-export type SortField = "port" | "protocol" | "pid" | "processName" | "state" | "localAddress";
+export type SortField = "port" | "protocol" | "pid" | "processName" | "processPath" | "state" | "localAddress";
 export type SortOrder = "asc" | "desc";
 
 export interface SortConfig {

@@ -35,7 +35,7 @@ src/                    # React 前端
 src-tauri/src/          # Rust 后端
 ├── lib.rs              # Tauri 命令入口
 ├── port_scanner.rs     # Windows API 端口扫描（TCP/UDP, IPv4/IPv6）
-└── process_killer.rs   # 进程终止（taskkill）
+└── process_killer.rs   # 进程关闭（taskkill，支持正常/强制）
 ```
 
 ## Tauri IPC
@@ -45,8 +45,7 @@ src-tauri/src/          # Rust 后端
 | 命令 | 参数 | 返回 |
 |------|------|------|
 | `scan_ports` | - | `PortInfo[]` |
-| `kill_process` | `pid: number` | `KillResult` |
-| `kill_processes` | `pids: number[]` | `KillResult[]` |
+| `kill_processes` | `targets: KillTarget[], force: boolean` | `KillResult[]` |
 
 ## 类型同步
 
@@ -55,6 +54,7 @@ Rust struct 和 TypeScript interface 必须保持一致：
 | Rust (`src-tauri/src/*.rs`) | TypeScript (`src/types/port.ts`) |
 |----------------------------|----------------------------------|
 | `PortInfo` | `PortInfo` |
+| `KillTarget` | `KillTarget` |
 | `KillResult` | `KillResult` |
 
 Rust 使用 `#[serde(rename_all = "camelCase")]`，TypeScript 使用 camelCase。

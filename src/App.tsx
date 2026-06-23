@@ -127,7 +127,7 @@ function App() {
     setShowConfirm(true);
   }, [selectedPortCount]);
 
-  const confirmKill = async () => {
+  const confirmKill = async (force: boolean) => {
     setShowConfirm(false);
     setIsKilling(true);
     try {
@@ -139,6 +139,7 @@ function App() {
       }));
       const results = await invoke<KillResult[]>("kill_processes", {
         targets,
+        force,
       });
       setKillResults(results);
 
@@ -146,6 +147,13 @@ function App() {
       await scanPorts();
     } catch (e) {
       console.error("Failed to kill processes:", e);
+      setKillResults([
+        {
+          pid: 0,
+          success: false,
+          message: `关闭失败: ${String(e)}`,
+        },
+      ]);
     } finally {
       setIsKilling(false);
     }
@@ -203,17 +211,20 @@ function App() {
       {showConfirm && (
         <div className="modal-overlay">
           <div className="modal">
-            <h3>确认终止进程</h3>
+            <h3>确认关闭进程</h3>
             <p>
-              确定要终止 {selectedProcessCount} 个进程吗？涉及 {selectedPortCount} 条端口记录。
+              确定要关闭 {selectedProcessCount} 个进程吗？涉及 {selectedPortCount} 条端口记录。
             </p>
-            <p className="warning">警告：强制终止可能导致数据丢失</p>
+            <p className="warning">建议先正常关闭；端口未释放时再强制关闭。</p>
             <div className="modal-actions">
               <button className="btn-cancel" onClick={() => setShowConfirm(false)}>
                 取消
               </button>
-              <button className="btn-confirm" onClick={confirmKill}>
-                确认终止
+              <button className="btn-force" onClick={() => confirmKill(true)}>
+                强制关闭
+              </button>
+              <button className="btn-confirm" onClick={() => confirmKill(false)}>
+                正常关闭
               </button>
             </div>
           </div>

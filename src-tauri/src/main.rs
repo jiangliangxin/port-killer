@@ -12,9 +12,13 @@ fn scan_ports() -> Result<Vec<PortInfo>, String> {
 }
 
 #[tauri::command]
-fn kill_processes(targets: Vec<KillTarget>) -> Result<Vec<KillResult>, String> {
+fn kill_processes(targets: Vec<KillTarget>, force: bool) -> Result<Vec<KillResult>, String> {
     let current_ports = port_scanner::scan_ports().map_err(|e| e.to_string())?;
-    Ok(process_killer::kill_processes(&targets, &current_ports))
+    Ok(process_killer::kill_processes(
+        &targets,
+        &current_ports,
+        force,
+    ))
 }
 
 fn main() {

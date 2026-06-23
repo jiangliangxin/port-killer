@@ -1,6 +1,6 @@
 use crate::port_scanner::PortInfo;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
@@ -42,7 +42,30 @@ fn target_still_matches(target: &KillTarget, port: &PortInfo) -> bool {
         && target.local_address == port.local_address
 }
 
-fn kill_single(pid: u32, timeout: Duration) -> KillResult {
+fn targets_released(targets: &[KillTarget], ports: &[PortInfo]) -> bool {
+    !targets
+        .iter()
+        .any(|target| ports.iter().any(|port| target_still_matches(target, port)))
+}
+
+fn wait_until_released(targets: &[KillTarget], timeout: Duration) -> Result<bool, String> {
+    let start = Instant::now();
+
+    loop {
+        let ports = crate::port_scanner::scan_ports().map_err(|e| e.to_string())?;
+        if targets_released(targets, &ports) {
+            return Ok(true);
+        }
+
+        if start.elapsed() >= timeout {
+            return Ok(false);
+        }
+
+        std::thread::sleep(Duration::from_millis(150));
+    }
+}
+
+fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
     if pid <= 4 {
         return KillResult {
             pid,
@@ -51,8 +74,14 @@ fn kill_single(pid: u32, timeout: Duration) -> KillResult {
         };
     }
 
-    let mut child = match Command::new("taskkill")
-        .args(["/PID", &pid.to_string(), "/F"])
+    let pid_arg = pid.to_string();
+    let mut command = Command::new("taskkill");
+    command.args(["/PID", pid_arg.as_str()]);
+    if force {
+        command.arg("/F");
+    }
+
+    let mut child = match command
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -113,17 +142,57 @@ fn kill_single(pid: u32, timeout: Duration) -> KillResult {
     }
 }
 
-pub fn kill_processes(targets: &[KillTarget], current_ports: &[PortInfo]) -> Vec<KillResult> {
-    let mut pids = BTreeSet::new();
+fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bool) -> KillResult {
+    let result = run_taskkill(pid, timeout, force);
+    if !result.success {
+        return result;
+    }
+
+    match wait_until_released(&targets, Duration::from_secs(2)) {
+        Ok(true) => KillResult {
+            pid,
+            success: true,
+            message: if force {
+                "已强制关闭并释放端口".to_string()
+            } else {
+                "已正常关闭并释放端口".to_string()
+            },
+        },
+        Ok(false) => KillResult {
+            pid,
+            success: false,
+            message: if force {
+                "已执行强制关闭，但端口仍未释放".to_string()
+            } else {
+                "正常关闭后端口仍未释放，可尝试强制关闭".to_string()
+            },
+        },
+        Err(e) => KillResult {
+            pid,
+            success: false,
+            message: format!("已执行关闭，但复查端口失败: {}", e),
+        },
+    }
+}
+
+pub fn kill_processes(
+    targets: &[KillTarget],
+    current_ports: &[PortInfo],
+    force: bool,
+) -> Vec<KillResult> {
+    let mut targets_by_pid: BTreeMap<u32, Vec<KillTarget>> = BTreeMap::new();
     let mut skipped = Vec::new();
 
     for target in targets {
-        // 杀进程前重新确认端口归属，避免 PID 复用或刷新延迟导致误杀。
+        // 关闭进程前重新确认端口归属，避免 PID 复用或刷新延迟导致误杀。
         if current_ports
             .iter()
             .any(|port| target_still_matches(target, port))
         {
-            pids.insert(target.pid);
+            targets_by_pid
+                .entry(target.pid)
+                .or_default()
+                .push(target.clone());
         } else {
             skipped.push(KillResult {
                 pid: target.pid,
@@ -135,8 +204,9 @@ pub fn kill_processes(targets: &[KillTarget], current_ports: &[PortInfo]) -> Vec
 
     let timeout = Duration::from_secs(5);
     let mut results: Vec<KillResult> = std::thread::scope(|s| {
-        pids.into_iter()
-            .map(|pid| s.spawn(move || kill_single(pid, timeout)))
+        targets_by_pid
+            .into_iter()
+            .map(|(pid, targets)| s.spawn(move || close_single(pid, targets, timeout, force)))
             .map(|h| {
                 h.join().unwrap_or(KillResult {
                     pid: 0,

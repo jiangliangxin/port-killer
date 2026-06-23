@@ -311,10 +311,19 @@ tr.selected-row:hover {
 }
 
 .btn-confirm {
-  background-color: #e74c3c;
+  background-color: #4a90d9;
   color: white;
 }
 
 .btn-confirm:hover {
+  background-color: #3a7bc8;
+}
+
+.btn-force {
+  background-color: #e74c3c;
+  color: white;
+}
+
+.btn-force:hover {
   background-color: #c0392b;
 }

@@ -108,7 +108,9 @@ fn get_process_name_map() -> HashMap<u32, String> {
 
         if Process32First(snapshot, &mut entry).is_ok() {
             loop {
-                let bytes: Vec<u8> = entry.szExeFile.iter()
+                let bytes: Vec<u8> = entry
+                    .szExeFile
+                    .iter()
                     .take_while(|&&b| b != 0)
                     .map(|&b| b as u8)
                     .collect();
@@ -127,7 +129,9 @@ fn get_process_name_map() -> HashMap<u32, String> {
     map
 }
 
-fn get_tcp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
+fn get_tcp_ports(
+    process_map: &HashMap<u32, String>,
+) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     unsafe {
         let mut size: u32 = 0;
         let mut result = Vec::new();
@@ -181,7 +185,10 @@ fn get_tcp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
                 port,
                 protocol: "TCP".to_string(),
                 pid,
-                process_name: process_map.get(&pid).cloned().unwrap_or_else(|| "Unknown".to_string()),
+                process_name: process_map
+                    .get(&pid)
+                    .cloned()
+                    .unwrap_or_else(|| "Unknown".to_string()),
                 state,
                 local_address: format!("{}:{}", ip, port),
             });
@@ -191,7 +198,9 @@ fn get_tcp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
     }
 }
 
-fn get_udp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
+fn get_udp_ports(
+    process_map: &HashMap<u32, String>,
+) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     unsafe {
         let mut size: u32 = 0;
         let mut result = Vec::new();
@@ -244,7 +253,10 @@ fn get_udp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
                 port,
                 protocol: "UDP".to_string(),
                 pid,
-                process_name: process_map.get(&pid).cloned().unwrap_or_else(|| "Unknown".to_string()),
+                process_name: process_map
+                    .get(&pid)
+                    .cloned()
+                    .unwrap_or_else(|| "Unknown".to_string()),
                 state: "BOUND".to_string(),
                 local_address: format!("{}:{}", ip, port),
             });
@@ -254,7 +266,9 @@ fn get_udp_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Bo
     }
 }
 
-fn get_tcp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
+fn get_tcp6_ports(
+    process_map: &HashMap<u32, String>,
+) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     unsafe {
         let mut size: u32 = 0;
         let mut result = Vec::new();
@@ -307,7 +321,10 @@ fn get_tcp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, B
                 port,
                 protocol: "TCP6".to_string(),
                 pid,
-                process_name: process_map.get(&pid).cloned().unwrap_or_else(|| "Unknown".to_string()),
+                process_name: process_map
+                    .get(&pid)
+                    .cloned()
+                    .unwrap_or_else(|| "Unknown".to_string()),
                 state,
                 local_address: format!("[{}]:{}", ip, port),
             });
@@ -317,7 +334,9 @@ fn get_tcp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, B
     }
 }
 
-fn get_udp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
+fn get_udp6_ports(
+    process_map: &HashMap<u32, String>,
+) -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     unsafe {
         let mut size: u32 = 0;
         let mut result = Vec::new();
@@ -369,7 +388,10 @@ fn get_udp6_ports(process_map: &HashMap<u32, String>) -> Result<Vec<PortInfo>, B
                 port,
                 protocol: "UDP6".to_string(),
                 pid,
-                process_name: process_map.get(&pid).cloned().unwrap_or_else(|| "Unknown".to_string()),
+                process_name: process_map
+                    .get(&pid)
+                    .cloned()
+                    .unwrap_or_else(|| "Unknown".to_string()),
                 state: "BOUND".to_string(),
                 local_address: format!("[{}]:{}", ip, port),
             });

@@ -26,3 +26,6 @@ npm-debug.log*
 
 # Tauri
 src-tauri/gen/schemas/
+
+# Build artifacts
+kill-port.exe

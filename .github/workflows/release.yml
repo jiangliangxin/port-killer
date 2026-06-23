@@ -1,0 +1,63 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  portable-windows:
+    name: Build portable Windows exe
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build portable release
+        run: pnpm release
+
+      - name: Verify release files
+        shell: pwsh
+        run: |
+          $exe = "release/端口占用管理工具.exe"
+          $hash = "release/端口占用管理工具.sha256.txt"
+          if (-not (Test-Path -LiteralPath $exe)) { throw "Missing $exe" }
+          if (-not (Test-Path -LiteralPath $hash)) { throw "Missing $hash" }
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: kill-port-portable-windows
+          path: |
+            release/端口占用管理工具.exe
+            release/端口占用管理工具.sha256.txt
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/端口占用管理工具.exe
+            release/端口占用管理工具.sha256.txt

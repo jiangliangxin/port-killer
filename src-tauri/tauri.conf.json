@@ -1,5 +1,5 @@
 {
-  "productName": "端口占用管理工具",
+  "productName": "Port Killer",
   "version": "0.1.0",
   "identifier": "com.killport.desktop",
   "build": {
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "端口占用管理工具",
+        "title": "Port Killer",
         "width": 1280,
         "height": 760,
         "minWidth": 960,
@@ -25,8 +25,17 @@
     }
   },
   "bundle": {
-    "active": false,
-    "targets": [],
-    "icon": []
+    "active": true,
+    "targets": ["dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns"
+    ],
+    "category": "DeveloperTool",
+    "shortDescription": "Port occupancy & process management",
+    "longDescription": "Scan TCP/UDP port occupancy, inspect the owning process, and terminate it with one click.",
+    "macOS": {}
   }
 }

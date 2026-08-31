@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use crate::common::PortInfo;
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::windows::process::CommandExt;
@@ -63,19 +63,6 @@ struct MIB_UDP6ROW_OWNER_PID {
 struct MIB_UDP6TABLE_OWNER_PID {
     dwNumEntries: u32,
     table: [MIB_UDP6ROW_OWNER_PID; 1],
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct PortInfo {
-    pub port: u16,
-    pub protocol: String,
-    pub pid: u32,
-    pub process_name: String,
-    pub process_path: String,
-    pub command_line: String,
-    pub state: String,
-    pub local_address: String,
 }
 
 #[derive(Debug, Clone)]

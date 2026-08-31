@@ -1,11 +1,5 @@
-use serde::Serialize;
+use crate::common::AppStatus;
 use windows::Win32::UI::Shell::IsUserAnAdmin;
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AppStatus {
-    pub elevated: bool,
-}
 
 pub fn current_status() -> AppStatus {
     AppStatus {

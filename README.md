@@ -2,7 +2,7 @@
 
 用 AI 写前端的时候，每次启动 dev server 都会开一个端口。任务一多，端口越积越多，不是忘了关就是端口冲突 — 烦了，所以写了这个。
 
-Windows 端口占用管理工具，扫描端口占用，一键终止进程。仅支持 Windows。
+跨平台端口占用管理工具：扫描端口占用，一键终止进程。支持 Windows 和 macOS。
 
 ## 功能
 
@@ -16,6 +16,8 @@ Windows 端口占用管理工具，扫描端口占用，一键终止进程。仅
 
 ## 使用
 
+### Windows
+
 从 [Releases](https://github.com/jiangliangxin/port-killer/releases) 下载 `port-killer.exe` 后双击运行，或自行构建：
 
 ```bash
@@ -24,31 +26,55 @@ pnpm release
 ```
 
 便携版产物为 `release/port-killer.exe`，可直接双击运行；同时会生成 `release/port-killer.sha256.txt` 便于校验。  
-如果构建时报“拒绝访问”，先关闭正在运行的 exe 再重新构建。
+如果构建时报"拒绝访问"，先关闭正在运行的 exe 再重新构建。
+
+### macOS
+
+从 [Releases](https://github.com/jiangliangxin/port-killer/releases) 下载 `.dmg` 文件：
+
+1. 双击打开 DMG
+2. 将 `Port Killer.app` 拖到 Applications 文件夹
+3. 首次打开时，右键点击 App > **打开**，在弹出的对话框中点击"打开"
+
+因为应用未签名（个人/开源项目未购买 Apple Developer 账号），macOS 的 Gatekeeper 会拦截未签名应用。也可以用命令行绕过：
+
+```bash
+xattr -cr "/Applications/Port Killer.app"
+```
+
+自行构建：
+
+```bash
+pnpm install
+pnpm release
+```
+
+产物为 `release/*.dmg` 及对应 `sha256.txt`。
 
 ## 注意
 
 关闭进程会影响该进程占用的所有端口。工具会在关闭前展示进程名、PID 和端口列表，并在执行前重新确认端口归属，但仍建议先确认进程路径和命令行。
 
-普通模式可以扫描端口；关闭系统进程或高权限进程时，可能需要以管理员身份运行。
+普通模式可以扫描端口；关闭系统进程或高权限进程时，可能需要管理员权限（Windows 以管理员运行，macOS 以 root/sudo 运行）。
 
 ## 开发
 
 ```bash
 pnpm install       # 安装前端依赖
 pnpm tauri dev     # 启动开发模式（热重载 + DevTools）
-pnpm release       # 生成点击即用的便携版 exe
+pnpm release       # 生成点击即用的安装包（Windows exe / macOS dmg）
 ```
 
 ## 技术栈
 
 - **前端**: React 18 + TypeScript + Vite
 - **后端**: Rust + Tauri 2.0
-- **Windows API**: `GetExtendedTcpTable` / `GetExtendedUdpTable` / `CreateToolhelp32Snapshot`
+- **Windows**: `GetExtendedTcpTable` / `GetExtendedUdpTable` / `CreateToolhelp32Snapshot` / `taskkill`
+- **macOS**: `lsof` / `ps` / `kill` / `proc_pidpath`
 
 ## 发布
 
-创建并推送 `v*` tag 后，GitHub Actions 会自动构建便携版 exe 并上传到 GitHub Release：
+创建并推送 `v*` tag 后，GitHub Actions 会自动构建 Windows 便携版 exe 和 macOS DMG 并上传到 GitHub Release：
 
 ```bash
 git tag v0.1.0

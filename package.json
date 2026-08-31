@@ -5,12 +5,17 @@
   "license": "MIT",
   "type": "module",
   "packageManager": "pnpm@10.30.3",
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "release": "pnpm tauri build && powershell -NoProfile -ExecutionPolicy Bypass -File scripts/create-portable-release.ps1"
+    "release": "pnpm tauri build && node scripts/post-build-release.mjs"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.0.0",

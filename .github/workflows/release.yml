@@ -59,3 +59,45 @@ jobs:
             --notes "Portable Windows release." `
             "release/port-killer.exe" `
             "release/port-killer.sha256.txt"
+
+  macos:
+    name: Build macOS DMG
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.30.3 --activate
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build DMG
+        run: pnpm release
+
+      - name: Verify release files
+        run: |
+          test -f release/*.dmg || { echo "Missing DMG"; exit 1; }
+          test -f release/*.sha256.txt || { echo "Missing sha256"; exit 1; }
+
+      - name: Publish macOS Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "macOS DMG release (unsigned)."
+          gh release upload "$tag" --clobber release/*.dmg release/*.sha256.txt

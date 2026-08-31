@@ -1,31 +1,63 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod common;
+
+#[cfg(target_os = "windows")]
 mod app_status;
+#[cfg(target_os = "windows")]
 mod port_scanner;
+#[cfg(target_os = "windows")]
 mod process_killer;
 
-use app_status::AppStatus;
-use port_scanner::PortInfo;
-use process_killer::{KillResult, KillTarget};
+#[cfg(target_os = "macos")]
+mod macos;
+
+use common::{AppStatus, KillResult, KillTarget, PortInfo};
 
 #[tauri::command]
 fn scan_ports() -> Result<Vec<PortInfo>, String> {
-    port_scanner::scan_ports().map_err(|e| e.to_string())
+    #[cfg(target_os = "windows")]
+    {
+        port_scanner::scan_ports().map_err(|e| e.to_string())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos::port_scanner::scan_ports().map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]
 fn kill_processes(targets: Vec<KillTarget>, force: bool) -> Result<Vec<KillResult>, String> {
-    let current_ports = port_scanner::scan_ports().map_err(|e| e.to_string())?;
-    Ok(process_killer::kill_processes(
-        &targets,
-        &current_ports,
-        force,
-    ))
+    #[cfg(target_os = "windows")]
+    {
+        let current_ports = port_scanner::scan_ports().map_err(|e| e.to_string())?;
+        Ok(process_killer::kill_processes(
+            &targets,
+            &current_ports,
+            force,
+        ))
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let current_ports = macos::port_scanner::scan_ports().map_err(|e| e.to_string())?;
+        Ok(macos::process_killer::kill_processes(
+            &targets,
+            &current_ports,
+            force,
+        ))
+    }
 }
 
 #[tauri::command]
 fn get_app_status() -> AppStatus {
-    app_status::current_status()
+    #[cfg(target_os = "windows")]
+    {
+        app_status::current_status()
+    }
+    #[cfg(target_os = "macos")]
+    {
+        macos::app_status::current_status()
+    }
 }
 
 fn main() {

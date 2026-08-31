@@ -1,6 +1,8 @@
-use crate::port_scanner::PortInfo;
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use crate::common::{
+    permission_denied_result, target_still_matches, wait_until_released, KillResult, KillTarget,
+    PortInfo, ReleaseCheckStatus,
+};
+use std::collections::BTreeMap;
 use std::io::ErrorKind;
 use std::os::windows::process::CommandExt;
 use std::process::{Command, Output, Stdio};
@@ -8,30 +10,6 @@ use std::time::{Duration, Instant};
 use windows::Win32::Globalization::{GetOEMCP, MultiByteToWideChar, MULTI_BYTE_TO_WIDE_CHAR_FLAGS};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-enum ReleaseCheckStatus {
-    Released,
-    StillOwned,
-    Reoccupied(Vec<u32>),
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KillTarget {
-    pub port: u16,
-    pub protocol: String,
-    pub pid: u32,
-    pub local_address: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct KillResult {
-    pub pid: u32,
-    pub success: bool,
-    pub status: String,
-    pub message: String,
-}
 
 fn decode_command_output(bytes: &[u8]) -> String {
     if bytes.is_empty() {
@@ -86,96 +64,6 @@ fn requires_force_message(message: &str) -> bool {
         || lower.contains("forcefully")
         || lower.contains("force")
         || message.contains("强制")
-}
-
-fn permission_denied_result(pid: u32) -> KillResult {
-    KillResult {
-        pid,
-        success: false,
-        status: "permissionDenied".to_string(),
-        message: "权限不足，无法关闭该进程；请以管理员身份重新运行后再试".to_string(),
-    }
-}
-
-fn target_still_matches(target: &KillTarget, port: &PortInfo) -> bool {
-    target.port == port.port
-        && target.protocol == port.protocol
-        && target.pid == port.pid
-        && target.local_address == port.local_address
-}
-
-fn target_endpoint_matches(target: &KillTarget, port: &PortInfo) -> bool {
-    target.port == port.port
-        && target.protocol == port.protocol
-        && target.local_address == port.local_address
-}
-
-fn original_targets_still_owned(targets: &[KillTarget], ports: &[PortInfo]) -> bool {
-    targets
-        .iter()
-        .any(|target| ports.iter().any(|port| target_still_matches(target, port)))
-}
-
-fn target_endpoints_still_occupied(targets: &[KillTarget], ports: &[PortInfo]) -> bool {
-    targets.iter().any(|target| {
-        ports
-            .iter()
-            .any(|port| target_endpoint_matches(target, port))
-    })
-}
-
-fn reoccupying_pids(targets: &[KillTarget], ports: &[PortInfo]) -> Vec<u32> {
-    let mut pids = BTreeSet::new();
-    for target in targets {
-        for port in ports {
-            if target_endpoint_matches(target, port) && !target_still_matches(target, port) {
-                pids.insert(port.pid);
-            }
-        }
-    }
-    pids.into_iter().collect()
-}
-
-fn wait_until_released(
-    targets: &[KillTarget],
-    timeout: Duration,
-) -> Result<ReleaseCheckStatus, String> {
-    let start = Instant::now();
-    let stable_free_duration = Duration::from_millis(300);
-    let mut free_since: Option<Instant> = None;
-
-    loop {
-        let ports = crate::port_scanner::scan_ports().map_err(|e| e.to_string())?;
-        let original_still_owned = original_targets_still_owned(targets, &ports);
-        let endpoint_still_occupied = target_endpoints_still_occupied(targets, &ports);
-
-        if !endpoint_still_occupied {
-            let free_start = free_since.get_or_insert_with(Instant::now);
-            if free_start.elapsed() >= stable_free_duration {
-                return Ok(ReleaseCheckStatus::Released);
-            }
-        } else {
-            free_since = None;
-        }
-
-        if !original_still_owned && endpoint_still_occupied {
-            return Ok(ReleaseCheckStatus::Reoccupied(reoccupying_pids(
-                targets, &ports,
-            )));
-        }
-
-        if start.elapsed() >= timeout {
-            return if original_still_owned {
-                Ok(ReleaseCheckStatus::StillOwned)
-            } else {
-                Ok(ReleaseCheckStatus::Reoccupied(reoccupying_pids(
-                    targets, &ports,
-                )))
-            };
-        }
-
-        std::thread::sleep(Duration::from_millis(150));
-    }
 }
 
 fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
@@ -285,7 +173,9 @@ fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bo
         return result;
     }
 
-    match wait_until_released(&targets, Duration::from_secs(2)) {
+    match wait_until_released(&targets, Duration::from_secs(2), || {
+        crate::port_scanner::scan_ports().map_err(|e| e.to_string())
+    }) {
         Ok(ReleaseCheckStatus::Released) => KillResult {
             pid,
             success: true,

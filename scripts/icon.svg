@@ -1,0 +1,13 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="220" fill="#0B0D12"/>
+  <rect x="24" y="24" width="976" height="976" rx="200" stroke="#1E2633" stroke-width="8"/>
+  <path d="M180 360 L300 470 L180 580" stroke="#FFFFFF" stroke-width="42" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="320" y1="580" x2="430" y2="580" stroke="#FFFFFF" stroke-width="42" stroke-linecap="round"/>
+  <circle cx="680" cy="470" r="150" stroke="#FFFFFF" stroke-width="24"/>
+  <line x1="680" y1="270" x2="680" y2="350" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+  <line x1="680" y1="590" x2="680" y2="670" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+  <line x1="480" y1="470" x2="560" y2="470" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+  <line x1="800" y1="470" x2="880" y2="470" stroke="#FFFFFF" stroke-width="24" stroke-linecap="round"/>
+  <circle cx="680" cy="470" r="38" fill="#FF453A"/>
+  <text x="512" y="820" text-anchor="middle" font-family="SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="110" font-weight="700" fill="#FF6B5F">:8080</text>
+</svg>

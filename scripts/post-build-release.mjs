@@ -51,9 +51,22 @@ function macosDmg() {
     process.exit(1);
   }
   const latest = dmgs[dmgs.length - 1];
-  const targetDmg = join(releaseDir, latest);
+
+  // CI 打 tag 发布时，用 tag 版本重命名 DMG，和 CLI 标准发布命名保持一致
+  // （tauri.conf.json 的 version 未必追随 git tag）。形如：
+  //   Port Killer_0.1.0_aarch64.dmg  --RELEASE_VERSION=0.1.5-->
+  //   Port Killer_0.1.5_aarch64.dmg
+  let finalName = latest;
+  const releaseVersion = process.env.RELEASE_VERSION;
+  if (releaseVersion) {
+    // 接受 "v0.1.5" 或 "0.1.5"，统一去掉前导 v，避免产物名出现 v0.1.5
+    const version = releaseVersion.replace(/^v/, "");
+    finalName = latest.replace(/_\d+\.\d+\.\d+_/, `_${version}_`);
+  }
+
+  const targetDmg = join(releaseDir, finalName);
   cpSync(join(dmgDir, latest), targetDmg);
-  const base = latest.replace(/\.dmg$/, "");
+  const base = finalName.replace(/\.dmg$/, "");
   writeHashFile(targetDmg, `${base}.sha256.txt`);
   console.log(`DMG: ${targetDmg}`);
 }

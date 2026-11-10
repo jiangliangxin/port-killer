@@ -90,9 +90,12 @@ function macosDmg() {
     .pop().file;
 
   resetReleaseDir();
-  const targetDmg = join(releaseDir, latest);
+  // GitHub 会把资产名里的空格换成点（Port Killer_x.dmg -> Port.Killer_x.dmg），
+  // 校验文件里的文件名必须和上传后的资产名一致，这里直接去掉空格。
+  const assetName = latest.replace(/\s+/g, "-");
+  const targetDmg = join(releaseDir, assetName);
   cpSync(join(dmgDir, latest), targetDmg);
-  writeHashFile(targetDmg, `${latest.replace(/\.dmg$/, "")}.sha256.txt`);
+  writeHashFile(targetDmg, `${assetName.replace(/\.dmg$/, "")}.sha256.txt`);
   console.log(`DMG: ${targetDmg}`);
 }
 

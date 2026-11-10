@@ -7,7 +7,16 @@ import { ActionBar } from "./components/ActionBar";
 import { AppStatus, KillResult, KillTarget, SortConfig, SortField } from "./types/port";
 
 const DEFAULT_SORT: SortConfig = { field: "port", order: "asc" };
-const CONFIRM_PREVIEW_LIMIT = 6;
+
+function permissionHint(status: AppStatus): string {
+  if (status.elevated) {
+    return "可以关闭当前用户和高权限进程；系统关键进程会被拒绝，避免误伤系统。";
+  }
+  if (status.platform === "macos") {
+    return "普通模式只能看到并关闭自己名下的进程，其他用户的端口不会出现在列表里；需要时以 root 重新运行。";
+  }
+  return "可以扫描端口；关闭高权限进程时可能需要以管理员身份重新运行。";
+}
 
 interface SelectedProcessSummary {
   pid: number;
@@ -36,13 +45,14 @@ function App() {
   }, []);
 
   // 自动刷新端口列表，适合排查 dev server 反复占用端口的场景。
+  // 关闭进程期间不刷新：否则列表会在操作过程中被替换，选中态和结果对不上。
   useEffect(() => {
-    if (!autoRefresh) return;
+    if (!autoRefresh || isKilling) return;
     const interval = setInterval(() => {
       scanPorts();
     }, 5000);
     return () => clearInterval(interval);
-  }, [autoRefresh, scanPorts]);
+  }, [autoRefresh, isKilling, scanPorts]);
 
   useEffect(() => {
     const validIds = new Set(ports.map((port) => port.id));
@@ -248,11 +258,7 @@ function App() {
         {appStatus && (
           <div className={`permission-banner ${appStatus.elevated ? "elevated" : "limited"}`}>
             <span>{appStatus.elevated ? "管理员模式" : "普通模式"}</span>
-            <p>
-              {appStatus.elevated
-                ? "可以关闭当前用户和高权限进程。"
-                : "可以扫描端口；关闭高权限进程时可能需要以管理员身份重新运行。"}
-            </p>
+            <p>{permissionHint(appStatus)}</p>
           </div>
         )}
       </header>
@@ -295,7 +301,9 @@ function App() {
                 className={
                   result.success
                     ? "success"
-                    : result.status === "permissionDenied" || result.status === "reoccupied"
+                    : result.status === "permissionDenied" ||
+                        result.status === "protected" ||
+                        result.status === "reoccupied"
                       ? "warning"
                       : "failed"
                 }
@@ -315,7 +323,7 @@ function App() {
               确定要关闭 {selectedProcessCount} 个进程吗？涉及 {selectedPortCount} 条端口记录。
             </p>
             <div className="confirm-process-list">
-              {selectedProcessSummaries.slice(0, CONFIRM_PREVIEW_LIMIT).map((process) => (
+              {selectedProcessSummaries.map((process) => (
                 <div className="confirm-process-item" key={process.pid} title={process.processPath}>
                   <span className="confirm-process-name">{process.processName}</span>
                   <span className="confirm-process-meta">
@@ -323,11 +331,6 @@ function App() {
                   </span>
                 </div>
               ))}
-              {selectedProcessSummaries.length > CONFIRM_PREVIEW_LIMIT && (
-                <div className="confirm-process-more">
-                  还有 {selectedProcessSummaries.length - CONFIRM_PREVIEW_LIMIT} 个进程未显示
-                </div>
-              )}
             </div>
             <p className="warning">建议先正常关闭；端口未释放时再强制关闭。</p>
             <div className="modal-actions">

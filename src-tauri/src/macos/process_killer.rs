@@ -1,13 +1,15 @@
 use crate::common::{
-    permission_denied_result, wait_until_released, KillResult, KillTarget, PortInfo,
-    ReleaseCheckStatus,
+    permission_denied_result, protected_reason, protected_result, skipped_result,
+    target_still_matches, verify_released, KillResult, KillTarget, PortInfo,
 };
 use std::collections::BTreeMap;
 use std::process::{Command, Stdio};
-use std::time::Duration;
+
+/// 固定使用系统自带的 kill，避免 PATH 被篡改后执行到别的可执行文件。
+const KILL_BIN: &str = "/bin/kill";
 
 fn run_kill(pid: u32, force: bool) -> KillResult {
-    let mut command = Command::new("kill");
+    let mut command = Command::new(KILL_BIN);
     if force {
         command.arg("-9");
     }
@@ -66,100 +68,68 @@ fn run_kill(pid: u32, force: bool) -> KillResult {
     }
 }
 
-fn close_single(pid: u32, targets: Vec<KillTarget>, force: bool) -> KillResult {
-    let result = run_kill(pid, force);
-    if !result.success {
-        return result;
-    }
-
-    let scan_fn = || crate::macos::port_scanner::scan_ports().map_err(|e| e.to_string());
-    match wait_until_released(&targets, Duration::from_secs(2), scan_fn) {
-        Ok(ReleaseCheckStatus::Released) => KillResult {
-            pid,
-            success: true,
-            status: "released".to_string(),
-            message: if force {
-                "已强制关闭并释放端口".to_string()
-            } else {
-                "已正常关闭并释放端口".to_string()
-            },
-        },
-        Ok(ReleaseCheckStatus::StillOwned) => KillResult {
-            pid,
-            success: false,
-            status: "notReleased".to_string(),
-            message: if force {
-                "已执行强制关闭，但端口仍未释放".to_string()
-            } else {
-                "正常关闭后端口仍未释放，可尝试强制关闭".to_string()
-            },
-        },
-        Ok(ReleaseCheckStatus::Reoccupied(pids)) => KillResult {
-            pid,
-            success: false,
-            status: "reoccupied".to_string(),
-            message: if pids.is_empty() {
-                "原进程已关闭，但端口又被其他进程占用".to_string()
-            } else {
-                format!(
-                    "原进程已关闭，但端口又被 PID {} 占用",
-                    pids.iter()
-                        .map(u32::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            },
-        },
-        Err(e) => KillResult {
-            pid,
-            success: false,
-            status: "failed".to_string(),
-            message: format!("已执行关闭，但复查端口失败: {}", e),
-        },
-    }
-}
-
 pub fn kill_processes(
     targets: &[KillTarget],
     current_ports: &[PortInfo],
     force: bool,
 ) -> Vec<KillResult> {
     let mut targets_by_pid: BTreeMap<u32, Vec<KillTarget>> = BTreeMap::new();
-    let mut skipped = Vec::new();
+    let mut results: Vec<KillResult> = Vec::new();
 
     for target in targets {
-        if current_ports
+        // 关闭进程前重新确认端口归属，避免 PID 复用或刷新延迟导致误杀。
+        let matched = current_ports
             .iter()
-            .any(|port| crate::common::target_still_matches(target, port))
-        {
-            targets_by_pid
-                .entry(target.pid)
-                .or_default()
-                .push(target.clone());
-        } else {
-            skipped.push(KillResult {
-                pid: target.pid,
-                success: false,
-                status: "skipped".to_string(),
-                message: format!("{} 已不再由该进程占用，已跳过", target.local_address),
-            });
+            .find(|port| target_still_matches(target, port));
+
+        let Some(port) = matched else {
+            results.push(skipped_result(target));
+            continue;
+        };
+
+        if let Some(reason) = protected_reason(target.pid, &port.process_name) {
+            results.push(protected_result(target.pid, &reason));
+            continue;
         }
+
+        targets_by_pid
+            .entry(target.pid)
+            .or_default()
+            .push(target.clone());
     }
 
-    let mut results: Vec<KillResult> = std::thread::scope(|s| {
+    // 并发执行 kill，全部结束后只做一次端口复查。
+    let killed: Vec<(u32, KillResult)> = std::thread::scope(|s| {
         targets_by_pid
-            .into_iter()
-            .map(|(pid, targets)| s.spawn(move || close_single(pid, targets, force)))
-            .map(|h| {
-                h.join().unwrap_or(KillResult {
-                    pid: 0,
-                    success: false,
-                    status: "failed".to_string(),
-                    message: "线程执行失败".to_string(),
-                })
+            .keys()
+            .map(|pid| {
+                let pid = *pid;
+                s.spawn(move || (pid, run_kill(pid, force)))
             })
+            // release 构建开启了 panic = "abort"，线程 panic 会直接终止进程，
+            // 这里的 expect 只用于表达"join 不会返回 Err"。
+            .map(|handle| handle.join().expect("kill thread panicked"))
             .collect()
     });
-    results.extend(skipped);
+
+    let to_verify: BTreeMap<u32, Vec<KillTarget>> = killed
+        .iter()
+        .filter(|(_, result)| result.success)
+        .filter_map(|(pid, _)| {
+            targets_by_pid
+                .get(pid)
+                .map(|targets| (*pid, targets.clone()))
+        })
+        .collect();
+
+    results.extend(
+        killed
+            .iter()
+            .filter(|(_, result)| !result.success)
+            .map(|(_, result)| result.clone()),
+    );
+    results.extend(verify_released(&to_verify, force, || {
+        crate::macos::port_scanner::scan_ports().map_err(|e| e.to_string())
+    }));
     results
 }

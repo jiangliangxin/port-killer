@@ -1,5 +1,10 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+#[cfg(not(any(target_os = "windows", target_os = "macos")))]
+compile_error!(
+    "kill-port 只支持 Windows 与 macOS：请为本平台补充 port_scanner / process_killer 实现"
+);
+
 mod common;
 
 #[cfg(target_os = "windows")]

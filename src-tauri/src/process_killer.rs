@@ -1,6 +1,6 @@
 use crate::common::{
-    permission_denied_result, target_still_matches, wait_until_released, KillResult, KillTarget,
-    PortInfo, ReleaseCheckStatus,
+    permission_denied_result, protected_reason, protected_result, skipped_result, system32_binary,
+    target_still_matches, verify_released, KillResult, KillTarget, PortInfo,
 };
 use std::collections::BTreeMap;
 use std::io::ErrorKind;
@@ -10,6 +10,7 @@ use std::time::{Duration, Instant};
 use windows::Win32::Globalization::{GetOEMCP, MultiByteToWideChar, MULTI_BYTE_TO_WIDE_CHAR_FLAGS};
 
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+const TASKKILL_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn decode_command_output(bytes: &[u8]) -> String {
     if bytes.is_empty() {
@@ -50,34 +51,37 @@ fn output_message(output: Output) -> String {
     "taskkill 返回失败".to_string()
 }
 
+/// taskkill 的权限不足提示是固定的几句，不要用 "permission" 这类宽泛子串，
+/// 否则任何含该词的输出都会被误判成权限问题。
 fn is_permission_denied_message(message: &str) -> bool {
     let lower = message.to_lowercase();
     lower.contains("access is denied")
-        || lower.contains("permission")
+        || lower.contains("access denied")
         || message.contains("拒绝访问")
-        || message.contains("权限")
+        || message.contains("权限不足")
 }
 
+/// 只有这些提示才说明"需要用 /F 强制结束"。
 fn requires_force_message(message: &str) -> bool {
     let lower = message.to_lowercase();
-    lower.contains("/f")
-        || lower.contains("forcefully")
-        || lower.contains("force")
-        || message.contains("强制")
+    lower.contains("forcefully")
+        || lower.contains("with /f")
+        || message.contains("强制结束")
+        || message.contains("只能被强制")
 }
 
-fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
+fn run_taskkill(pid: u32, force: bool) -> KillResult {
     if pid <= 4 {
         return KillResult {
             pid,
             success: false,
-            status: "failed".to_string(),
-            message: "无法终止系统进程".to_string(),
+            status: "protected".to_string(),
+            message: "已拒绝关闭：系统保留进程".to_string(),
         };
     }
 
     let pid_arg = pid.to_string();
-    let mut command = Command::new("taskkill");
+    let mut command = Command::new(system32_binary("taskkill.exe"));
     command.args(["/PID", pid_arg.as_str()]);
     command.creation_flags(CREATE_NO_WINDOW);
     if force {
@@ -115,35 +119,35 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
                         status: "closed".to_string(),
                         message: "已成功终止".to_string(),
                     };
-                } else {
-                    let message = child
-                        .wait_with_output()
-                        .ok()
-                        .map(output_message)
-                        .unwrap_or_else(|| "未知错误".to_string());
-                    if is_permission_denied_message(&message) {
-                        return permission_denied_result(pid);
-                    }
-                    if !force && requires_force_message(&message) {
-                        return KillResult {
-                            pid,
-                            success: false,
-                            status: "notReleased".to_string(),
-                            message: "正常关闭失败：该进程需要使用强制结束，可点击“强制关闭”重试"
-                                .to_string(),
-                        };
-                    }
+                }
 
+                let message = child
+                    .wait_with_output()
+                    .ok()
+                    .map(output_message)
+                    .unwrap_or_else(|| "未知错误".to_string());
+                if is_permission_denied_message(&message) {
+                    return permission_denied_result(pid);
+                }
+                if !force && requires_force_message(&message) {
                     return KillResult {
                         pid,
                         success: false,
-                        status: "failed".to_string(),
-                        message,
+                        status: "notReleased".to_string(),
+                        message: "正常关闭失败：该进程需要使用强制结束，可点击“强制关闭”重试"
+                            .to_string(),
                     };
                 }
+
+                return KillResult {
+                    pid,
+                    success: false,
+                    status: "failed".to_string(),
+                    message,
+                };
             }
             Ok(None) => {
-                if start.elapsed() > timeout {
+                if start.elapsed() > TASKKILL_TIMEOUT {
                     let _ = child.kill();
                     child.wait().ok();
                     return KillResult {
@@ -161,63 +165,9 @@ fn run_taskkill(pid: u32, timeout: Duration, force: bool) -> KillResult {
                     success: false,
                     status: "failed".to_string(),
                     message: format!("等待 taskkill 失败: {}", e),
-                }
+                };
             }
         }
-    }
-}
-
-fn close_single(pid: u32, targets: Vec<KillTarget>, timeout: Duration, force: bool) -> KillResult {
-    let result = run_taskkill(pid, timeout, force);
-    if !result.success {
-        return result;
-    }
-
-    match wait_until_released(&targets, Duration::from_secs(2), || {
-        crate::port_scanner::scan_ports().map_err(|e| e.to_string())
-    }) {
-        Ok(ReleaseCheckStatus::Released) => KillResult {
-            pid,
-            success: true,
-            status: "released".to_string(),
-            message: if force {
-                "已强制关闭并释放端口".to_string()
-            } else {
-                "已正常关闭并释放端口".to_string()
-            },
-        },
-        Ok(ReleaseCheckStatus::StillOwned) => KillResult {
-            pid,
-            success: false,
-            status: "notReleased".to_string(),
-            message: if force {
-                "已执行强制关闭，但端口仍未释放".to_string()
-            } else {
-                "正常关闭后端口仍未释放，可尝试强制关闭".to_string()
-            },
-        },
-        Ok(ReleaseCheckStatus::Reoccupied(pids)) => KillResult {
-            pid,
-            success: false,
-            status: "reoccupied".to_string(),
-            message: if pids.is_empty() {
-                "原进程已关闭，但端口又被其他进程占用".to_string()
-            } else {
-                format!(
-                    "原进程已关闭，但端口又被 PID {} 占用",
-                    pids.iter()
-                        .map(u32::to_string)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                )
-            },
-        },
-        Err(e) => KillResult {
-            pid,
-            success: false,
-            status: "failed".to_string(),
-            message: format!("已执行关闭，但复查端口失败: {}", e),
-        },
     }
 }
 
@@ -227,43 +177,62 @@ pub fn kill_processes(
     force: bool,
 ) -> Vec<KillResult> {
     let mut targets_by_pid: BTreeMap<u32, Vec<KillTarget>> = BTreeMap::new();
-    let mut skipped = Vec::new();
+    let mut results: Vec<KillResult> = Vec::new();
 
     for target in targets {
         // 关闭进程前重新确认端口归属，避免 PID 复用或刷新延迟导致误杀。
-        if current_ports
+        let matched = current_ports
             .iter()
-            .any(|port| target_still_matches(target, port))
-        {
-            targets_by_pid
-                .entry(target.pid)
-                .or_default()
-                .push(target.clone());
-        } else {
-            skipped.push(KillResult {
-                pid: target.pid,
-                success: false,
-                status: "skipped".to_string(),
-                message: format!("{} 已不再由该进程占用，已跳过", target.local_address),
-            });
+            .find(|port| target_still_matches(target, port));
+
+        let Some(port) = matched else {
+            results.push(skipped_result(target));
+            continue;
+        };
+
+        if let Some(reason) = protected_reason(target.pid, &port.process_name) {
+            results.push(protected_result(target.pid, &reason));
+            continue;
         }
+
+        targets_by_pid
+            .entry(target.pid)
+            .or_default()
+            .push(target.clone());
     }
 
-    let timeout = Duration::from_secs(5);
-    let mut results: Vec<KillResult> = std::thread::scope(|s| {
+    // 并发执行 taskkill，全部结束后只做一次端口复查。
+    let killed: Vec<(u32, KillResult)> = std::thread::scope(|s| {
         targets_by_pid
-            .into_iter()
-            .map(|(pid, targets)| s.spawn(move || close_single(pid, targets, timeout, force)))
-            .map(|h| {
-                h.join().unwrap_or(KillResult {
-                    pid: 0,
-                    success: false,
-                    status: "failed".to_string(),
-                    message: "线程执行失败".to_string(),
-                })
+            .keys()
+            .map(|pid| {
+                let pid = *pid;
+                s.spawn(move || (pid, run_taskkill(pid, force)))
             })
+            // release 构建开启了 panic = "abort"，线程 panic 会直接终止进程，
+            // 这里的 expect 只用于表达"join 不会返回 Err"。
+            .map(|handle| handle.join().expect("kill thread panicked"))
             .collect()
     });
-    results.extend(skipped);
+
+    let to_verify: BTreeMap<u32, Vec<KillTarget>> = killed
+        .iter()
+        .filter(|(_, result)| result.success)
+        .filter_map(|(pid, _)| {
+            targets_by_pid
+                .get(pid)
+                .map(|targets| (*pid, targets.clone()))
+        })
+        .collect();
+
+    results.extend(
+        killed
+            .iter()
+            .filter(|(_, result)| !result.success)
+            .map(|(_, result)| result.clone()),
+    );
+    results.extend(verify_released(&to_verify, force, || {
+        crate::port_scanner::scan_ports().map_err(|e| e.to_string())
+    }));
     results
 }

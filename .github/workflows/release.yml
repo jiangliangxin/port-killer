@@ -36,6 +36,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Sync version from tag
+        shell: pwsh
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: node scripts/set-version.mjs
+
       - name: Build portable release
         run: pnpm release
 
@@ -78,10 +84,18 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build DMG
+      - name: Sync version from tag
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
-        run: pnpm release
+        run: node scripts/set-version.mjs
+
+      - name: Add universal targets
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Build universal DMG
+        run: |
+          pnpm tauri build --target universal-apple-darwin
+          node scripts/post-build-release.mjs
 
       - name: Verify release files
         run: |
@@ -130,9 +144,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF_NAME}"
-          notes="Port Killer release.\n\nAssets built via GitHub Actions."
-          gh release create "$tag" \
-            --title "$tag" \
-            --notes "$notes" \
-            release/windows/* \
-            release/macos/*
+          notes="$(printf 'Port Killer %s\n\nAssets built via GitHub Actions.\nWindows assets require the WebView2 runtime (built in on Windows 11 and up-to-date Windows 10).' "$tag")"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # tag 重跑时覆盖同名资产，而不是直接失败
+            gh release upload "$tag" --clobber release/windows/* release/macos/*
+          else
+            gh release create "$tag" \
+              --title "$tag" \
+              --notes "$notes" \
+              release/windows/* \
+              release/macos/*
+          fi

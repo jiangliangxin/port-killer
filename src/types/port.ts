@@ -29,12 +29,14 @@ export interface KillResult {
     | "failed"
     | "closed"
     | "permissionDenied"
+    | "protected"
     | "reoccupied";
   message: string;
 }
 
 export interface AppStatus {
   elevated: boolean;
+  platform: "windows" | "macos" | string;
 }
 
 export type SortField =

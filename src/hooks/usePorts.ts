@@ -26,9 +26,17 @@ export function usePorts() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scanningRef = useRef(false);
+  const pendingRef = useRef(false);
+  const scanRef = useRef<() => Promise<void>>(async () => {});
 
   const scanPorts = useCallback(async () => {
-    if (scanningRef.current) return;
+    // 扫描期间再次触发（例如自动刷新撞上手动刷新）时记一次待办，
+    // 等当前扫描结束后补一次，而不是把刷新请求直接丢掉。
+    if (scanningRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+
     scanningRef.current = true;
     setLoading(true);
     setError(null);
@@ -40,8 +48,14 @@ export function usePorts() {
     } finally {
       scanningRef.current = false;
       setLoading(false);
+      if (pendingRef.current) {
+        pendingRef.current = false;
+        void scanRef.current();
+      }
     }
   }, []);
+
+  scanRef.current = scanPorts;
 
   useEffect(() => {
     scanPorts();

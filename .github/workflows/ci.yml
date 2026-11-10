@@ -49,6 +49,10 @@ jobs:
         working-directory: src-tauri
         run: cargo clippy --all-targets --all-features -- -D warnings
 
+      - name: Run tests
+        working-directory: src-tauri
+        run: cargo test
+
   macos:
     name: macOS checks
     runs-on: macos-latest

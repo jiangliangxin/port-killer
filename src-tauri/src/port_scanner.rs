@@ -1,4 +1,4 @@
-use crate::common::PortInfo;
+use crate::common::{system32_binary, PortInfo};
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::windows::process::CommandExt;
@@ -24,6 +24,8 @@ const TCP_TABLE_OWNER_PID_LISTENER: i32 = 3;
 // UDP_TABLE_OWNER_PID = 1
 const UDP_TABLE_OWNER_PID: i32 = 1;
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+// 端口表在扫描期间可能持续变化，重试次数上限用于避免无限自旋。
+const MAX_TABLE_ATTEMPTS: u32 = 8;
 
 /// IPv6 TCP 行结构（Windows API 未提供，手动定义）
 #[repr(C)]
@@ -126,7 +128,7 @@ fn get_command_line_map() -> HashMap<u32, String> {
         Select-Object ProcessId,CommandLine | \
         ConvertTo-Json -Compress";
 
-    let output = match Command::new("powershell.exe")
+    let output = match Command::new(system32_binary("WindowsPowerShell\\v1.0\\powershell.exe"))
         .args([
             "-NoProfile",
             "-ExecutionPolicy",
@@ -262,7 +264,12 @@ fn get_tcp_ports(
             0,
         );
 
+        if size == 0 {
+            return Err("端口表缓冲区大小为 0".into());
+        }
+
         let mut buffer: Vec<u8> = vec![0; size as usize];
+        let mut attempts: u32 = 0;
 
         loop {
             let table_ptr = buffer.as_mut_ptr() as *mut MIB_TCPTABLE_OWNER_PID;
@@ -278,6 +285,10 @@ fn get_tcp_ports(
             if ret == 0 {
                 break;
             } else if ret == ERROR_INSUFFICIENT_BUFFER.0 {
+                attempts += 1;
+                if attempts > MAX_TABLE_ATTEMPTS {
+                    return Err(format!("端口表重试 {} 次仍未取到", attempts).into());
+                }
                 buffer.resize(size as usize, 0);
                 continue;
             } else {
@@ -331,7 +342,12 @@ fn get_udp_ports(
             0,
         );
 
+        if size == 0 {
+            return Err("端口表缓冲区大小为 0".into());
+        }
+
         let mut buffer: Vec<u8> = vec![0; size as usize];
+        let mut attempts: u32 = 0;
 
         loop {
             let table_ptr = buffer.as_mut_ptr() as *mut MIB_UDPTABLE_OWNER_PID;
@@ -347,6 +363,10 @@ fn get_udp_ports(
             if ret == 0 {
                 break;
             } else if ret == ERROR_INSUFFICIENT_BUFFER.0 {
+                attempts += 1;
+                if attempts > MAX_TABLE_ATTEMPTS {
+                    return Err(format!("端口表重试 {} 次仍未取到", attempts).into());
+                }
                 buffer.resize(size as usize, 0);
                 continue;
             } else {
@@ -398,7 +418,12 @@ fn get_tcp6_ports(
             0,
         );
 
+        if size == 0 {
+            return Err("端口表缓冲区大小为 0".into());
+        }
+
         let mut buffer: Vec<u8> = vec![0; size as usize];
+        let mut attempts: u32 = 0;
 
         loop {
             let table_ptr = buffer.as_mut_ptr() as *mut MIB_TCP6TABLE_OWNER_PID;
@@ -414,6 +439,10 @@ fn get_tcp6_ports(
             if ret == 0 {
                 break;
             } else if ret == ERROR_INSUFFICIENT_BUFFER.0 {
+                attempts += 1;
+                if attempts > MAX_TABLE_ATTEMPTS {
+                    return Err(format!("端口表重试 {} 次仍未取到", attempts).into());
+                }
                 buffer.resize(size as usize, 0);
                 continue;
             } else {
@@ -466,7 +495,12 @@ fn get_udp6_ports(
             0,
         );
 
+        if size == 0 {
+            return Err("端口表缓冲区大小为 0".into());
+        }
+
         let mut buffer: Vec<u8> = vec![0; size as usize];
+        let mut attempts: u32 = 0;
 
         loop {
             let table_ptr = buffer.as_mut_ptr() as *mut MIB_UDP6TABLE_OWNER_PID;
@@ -482,6 +516,10 @@ fn get_udp6_ports(
             if ret == 0 {
                 break;
             } else if ret == ERROR_INSUFFICIENT_BUFFER.0 {
+                attempts += 1;
+                if attempts > MAX_TABLE_ATTEMPTS {
+                    return Err(format!("端口表重试 {} 次仍未取到", attempts).into());
+                }
                 buffer.resize(size as usize, 0);
                 continue;
             } else {

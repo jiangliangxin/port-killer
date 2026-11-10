@@ -11,6 +11,7 @@
 - 显示进程路径和命令行，便于区分多个同名进程
 - 按进程分组选中并批量关闭，关闭前复查 PID 和端口归属
 - 识别普通/管理员模式，权限不足时给出明确提示
+- 拒绝系统关键进程（launchd / ControlCenter / svchost / lsass 等），避免"全选"误伤整机
 - 关闭后复查端口是否释放，能识别端口被新 PID 重新占用的情况
 - 自动刷新
 
@@ -18,7 +19,9 @@
 
 ### Windows
 
-从 [Releases](https://github.com/jiangliangxin/port-killer/releases) 下载 `port-killer.exe` 后双击运行，或自行构建：
+从 [Releases](https://github.com/jiangliangxin/port-killer/releases) 下载 `port-killer.exe` 后双击运行，或自行构建。
+
+便携版依赖系统自带的 WebView2 运行时（Windows 11 与已更新的 Windows 10 默认具备）。
 
 ```bash
 pnpm install
@@ -57,6 +60,10 @@ pnpm release
 
 普通模式可以扫描端口；关闭系统进程或高权限进程时，可能需要管理员权限（Windows 以管理员运行，macOS 以 root/sudo 运行）。
 
+macOS 上非 root 的 `lsof` 只能看到当前用户的 socket，因此普通模式下列表是**不完整**的：别的用户的端口不会出现，需要以 root 运行才能看到全部。
+
+系统关键进程（macOS 的 launchd、ControlCenter、mDNSResponder 等，Windows 的 svchost、lsass、csrss 等）无论权限如何都会被拒绝关闭。
+
 ## 开发
 
 ```bash
@@ -74,12 +81,15 @@ pnpm release       # 生成点击即用的安装包（Windows exe / macOS dmg）
 
 ## 发布
 
-创建并推送 `v*` tag 后，GitHub Actions 会自动构建 Windows 便携版 exe 和 macOS DMG 并上传到 GitHub Release：
+创建并推送 `v*` tag 后，GitHub Actions 会自动构建 Windows 便携版 exe 和 macOS 通用 DMG（Apple Silicon + Intel）并上传到 GitHub Release：
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.6
+git push origin v0.1.6
 ```
+
+tag 里的版本号会被 `scripts/set-version.mjs` 写进 `package.json`、`Cargo.toml`、`tauri.conf.json`，
+所以产物内置版本、DMG 文件名与 tag 始终一致——不需要手动改三处版本号。
 
 ## 许可证
 

@@ -2,6 +2,10 @@ use crate::common::PortInfo;
 use std::collections::HashMap;
 use std::process::Command;
 
+/// 固定使用系统自带程序，避免 PATH 被篡改后执行到同名文件。
+const PS_BIN: &str = "/bin/ps";
+const LSOF_BIN: &str = "/usr/sbin/lsof";
+
 #[derive(Debug, Clone)]
 struct ProcessInfo {
     name: String,
@@ -17,55 +21,70 @@ fn process_info_for(map: &HashMap<u32, ProcessInfo>, pid: u32) -> ProcessInfo {
     })
 }
 
-/// 批量获取所有进程的基本信息。
-fn get_process_info_map() -> HashMap<u32, ProcessInfo> {
+/// 解析 `ps -ax -ww -o pid=,<field>=` 的输出：第一列是 PID，其余整段都是字段值。
+///
+/// 不能按空白切分字段：`comm` 是完整路径、`args` 是完整命令行，
+/// 其中都可能含空格（`/Applications/My App.app/...`）。
+fn parse_pid_field_output(text: &str) -> HashMap<u32, String> {
     let mut map = HashMap::new();
 
-    // ps -ax -o pid=,comm=,args=  等号去除标题行
-    let output = match Command::new("ps")
-        .args(["-ax", "-o", "pid=,comm=,args="])
-        .output()
-    {
-        Ok(o) if o.status.success() => o,
-        _ => return map,
-    };
-
-    let text = String::from_utf8_lossy(&output.stdout);
     for line in text.lines() {
-        let line = line.trim();
+        let line = line.trim_start();
         if line.is_empty() {
             continue;
         }
-        // pid 在最前面，宽度固定，用 splitn 取第一段
-        let trimmed = line.trim_start();
-        let mut parts = trimmed.splitn(3, |c: char| c.is_whitespace());
-        let pid_str = match parts.next() {
-            Some(s) => s,
-            None => continue,
+
+        let Some((pid_str, value)) = line.split_once(|c: char| c.is_whitespace()) else {
+            continue;
         };
-        let pid: u32 = match pid_str.parse() {
-            Ok(p) => p,
-            Err(_) => continue,
+        let Ok(pid) = pid_str.parse::<u32>() else {
+            continue;
         };
-        let name = parts
-            .next()
-            .map(|s| {
-                // macOS 的 comm 列是完整路径，前端按进程名分组，取 basename 更直观
-                s.rsplit('/')
-                    .next()
-                    .filter(|b| !b.is_empty())
-                    .unwrap_or(s)
-                    .to_string()
-            })
-            .unwrap_or_else(|| "Unknown".to_string());
-        let command_line = parts.next().unwrap_or("").to_string();
-        let path = get_process_path(pid);
+
+        let value = value.trim();
+        if !value.is_empty() {
+            map.insert(pid, value.to_string());
+        }
+    }
+
+    map
+}
+
+fn run_ps(field: &str) -> HashMap<u32, String> {
+    let output = match Command::new(PS_BIN)
+        .args(["-ax", "-ww", "-o", &format!("pid=,{}=", field)])
+        .output()
+    {
+        Ok(output) if output.status.success() => output,
+        _ => return HashMap::new(),
+    };
+
+    parse_pid_field_output(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// 批量获取所有进程的基本信息。
+///
+/// 分两次取：`comm`（可执行文件路径）与 `args`（完整命令行），
+/// 各自都是行尾字段，不会因为路径里有空格而解析错位。
+fn get_process_info_map() -> HashMap<u32, ProcessInfo> {
+    let commands = run_ps("args");
+    let comms = run_ps("comm");
+    let mut map = HashMap::new();
+
+    for (pid, comm) in comms {
+        // macOS 的 comm 是完整路径，前端按进程名分组，取 basename 更直观
+        let name = comm
+            .rsplit('/')
+            .find(|segment| !segment.is_empty())
+            .unwrap_or(comm.as_str())
+            .to_string();
+
         map.insert(
             pid,
             ProcessInfo {
                 name,
-                path,
-                command_line,
+                path: get_process_path(pid),
+                command_line: commands.get(&pid).cloned().unwrap_or_default(),
             },
         );
     }
@@ -271,8 +290,8 @@ pub fn scan_ports() -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     let process_map = get_process_info_map();
     let mut ports = Vec::new();
 
-    // TCP — 只获取真正监听中的 + 已建立连接的
-    let tcp_output = Command::new("lsof")
+    // TCP — 只取 LISTEN 状态的监听端口；已建立连接不展示
+    let tcp_output = Command::new(LSOF_BIN)
         .args(["-i", "TCP", "-sTCP:LISTEN", "-F", "pcntT", "-P", "-n"])
         .output()?;
     if tcp_output.status.success() {
@@ -281,7 +300,7 @@ pub fn scan_ports() -> Result<Vec<PortInfo>, Box<dyn std::error::Error>> {
     }
 
     // UDP
-    let udp_output = Command::new("lsof")
+    let udp_output = Command::new(LSOF_BIN)
         .args(["-i", "UDP", "-F", "pcntT", "-P", "-n"])
         .output()?;
     if udp_output.status.success() {
@@ -303,6 +322,20 @@ mod tests {
             path: path.to_string(),
             command_line: cmdline.to_string(),
         }
+    }
+
+    #[test]
+    fn pid_field_parser_keeps_spaces() {
+        let text = "  123   /Applications/My App.app/Contents/MacOS/My App\n\
+                    456   /usr/bin/node\n\
+                    bad   line\n";
+        let map = parse_pid_field_output(text);
+        assert_eq!(
+            map.get(&123).map(String::as_str),
+            Some("/Applications/My App.app/Contents/MacOS/My App")
+        );
+        assert_eq!(map.get(&456).map(String::as_str), Some("/usr/bin/node"));
+        assert_eq!(map.len(), 2);
     }
 
     #[test]
